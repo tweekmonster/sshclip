@@ -1,0 +1,230 @@
+#!/bin/bash
+name="${BASH_SOURCE[0]##*/}"
+readonly max_bytes=262144  # 256 KiB, which is already a lot for text
+action=""
+store=""
+passthru=1
+sshcmd=${SSHCLIP_SSHCMD:-"ssh sshclip-server"}
+# sshcmd="ssh -i $HOME/.ssh/id_sshclip sshclip@esdf.io"
+
+
+show_help() {
+    cat <<EOF
+sshclip-client [--impersonate [osx xclip xsel]] [-h]
+
+Options:
+    -h                  This thing here
+    --impersonate       Create symlinks that impersonates another clipboard
+                        program. Options are: osx, xclip, and xsel.
+    --no-passthru       Don't attempt to pass yoinks to the system's clipboard.
+
+This script is a client for sshclip-server which acts as a personal clipboard
+server that can be accessed over the network. The goal is to have a clipboard
+program for Vim users that often have to work across multiple remote servers.
+
+Recommended setup:
+
+Generate a public/private key pair to authenticate with the server. Using
+password authentication would be annoying if it worked in Vim.
+
+    ssh-keygen -t rsa -b 2048 -N '' -f ~/.ssh/id_sshclip -C "sshclip@${HOST}"
+
+Configure the server in ~/.ssh/config with multiplexing for faster
+connections.
+
+    Host sshclip-server
+        Name example.com
+        User sshclip
+        IdentityFile ~/.ssh/id_sshclip
+        ControlMaster auto
+        ControlPersist 10m
+        ControlPath ~/.ssh/control/sshclip-server
+
+sshclip-server can be copied to your server and set as the shell for an
+unprivileged, passwordless account.
+EOF
+    exit 1
+}
+
+
+bail() {
+    >&2 echo "$1"
+    exit 1
+}
+
+
+parse_args() {
+    while [[ $# > 0 ]]; do
+        case $1 in
+            -h|--help)
+                show_help
+                ;;
+            -i*)
+                action="put"
+                ;;
+            -o*)
+                action="get"
+                ;;
+            -sel*)
+                store="${2}"
+                shift
+                ;;
+            -b|--clipboard)
+                store="clipboard"
+                ;;
+            -p|--primary)
+                store="primary"
+                ;;
+            -s|--secondary)
+                store="secondary"
+                ;;
+            --no-passthru)
+                passthru=0
+                ;;
+        esac
+        shift
+    done
+}
+
+
+resolve_links() {
+    file="$1"
+    cd $(dirname "$file")
+    file=$(basename "$file")
+    i=0
+    while [ -L "$file" ]; do
+        file=$(readlink "$file")
+        cd "$(dirname "$file")"
+        file=$(basename "$file")
+
+    done
+    echo "$(pwd -P)/${file}"
+}
+
+
+find_system_clipboard() {
+    self=$(resolve_links "${BASH_SOURCE[0]}")
+    found=""
+    clipboards=("pbcopy xclip xsel")
+    for prog in $clipboards; do
+        for item in $(which -a "$prog"); do
+            item=$(resolve_links "$item")
+            if [[ "$item" != "$self" ]]; then
+                found=$item
+                break 2
+            fi
+        done
+    done
+
+    if [[ -n "$found" ]]; then
+        found_name=$(basename "$found")
+        found_args=""
+        if [[ "$found_name" == "xclip" ]]; then
+            found_args="-i -selection \"$store\""
+        elif [[ "$found_name" == "xsel" ]]; then
+            found_args="-i"
+            case $store in
+                clipboard)
+                    found_args="$found_args -b"
+                    ;;
+                primary)
+                    found_args="$found_args -p"
+                    ;;
+                secondary)
+                    found_args="$found_args -s"
+                    ;;
+            esac
+        fi
+        echo "$found $found_args"
+    fi
+}
+
+
+impersonate() {
+    dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+    real="${dir}/$(basename "${BASH_SOURCE[0]}")"
+
+    case $1 in
+        osx)
+            ln -s "${real}" "${dir}/pbcopy"
+            ln -s "${real}" "${dir}/pbpaste"
+            ;;
+        xclip)
+            ln -s "${real}" "${dir}/xclip"
+            ;;
+        xsel)
+            ln -s "${real}" "${dir}/xsel"
+            ;;
+        *)
+            bail "Impersonate options: osx, xclip, or xsel"
+            ;;
+    esac
+
+    echo "Created symlinks for $1"
+}
+
+
+if [[ $1 == "--impersonate" ]]; then
+    if [[ $name != "sshclip-client" ]]; then
+        bail "Use sshclip-client to impersonate another program"
+    fi
+
+    impersonate $2
+    exit 0
+fi
+
+parse_args $@
+
+case $name in
+    pbcopy)
+        action="put"
+        store="clipboard"
+        ;;
+    pbpaste)
+        action="get"
+        store="clipboard"
+        ;;
+    xclip|xsel|sshclip-client)
+        ;;
+    *)
+        bail "Not sure how to read arguments"
+        ;;
+esac
+
+
+if [[ -z "$action" ]]; then
+    show_help
+    exit 1
+fi
+
+
+case $store in
+    clipboard|primary|secondary)
+        ;;
+    *)
+        bail "Incorrect store, use: clipboard, primary, or secondary"
+        ;;
+esac
+
+
+# Using base64 to ensure data isn't mangled in transport
+# sshclip-server strips what it recieves of non-printable characters
+case $action in
+    put)
+        [[ $passthru -eq 1 ]] && passthru_cmd=$(find_system_clipboard)
+        if [[ -n "$passthru_cmd" ]]; then
+            logger "Passthru to: ${passthru_cmd}"
+            tee >($passthru_cmd) | head -c $max_bytes | base64 | $sshcmd "put $store"
+        else
+            head -c $max_bytes | base64 | $sshcmd "put $store"
+        fi
+        ;;
+    get)
+        $sshcmd "get ${store}" | base64 --decode
+        ;;
+    *)
+        bail "Uknown action: ${action}"
+        ;;
+esac
+
+# vim: set ts=4 sw=4 tw=0 et :

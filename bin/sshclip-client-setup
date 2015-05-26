@@ -1,0 +1,55 @@
+#!/bin/bash
+if [[ ! -e "${HOME}/.ssh/id_sshclip" ]]; then
+    echo "Generating a key"
+    echo ""
+    host=$(hostname)
+    ssh-keygen -t rsa -b 2048 -N '' -f ~/.ssh/id_sshclip -C "sshclip@${host}"
+
+    echo "Add the following public key to your server:"
+    cat "${HOME}/.ssh/id_sshclip.pub"
+fi
+
+grep -q "sshclip-server" "${HOME}/.ssh/config"
+if [[ $? -ne 0 ]]; then
+    cliphost=""
+    echo ""
+    echo "Adding sshclip-server Host to ~/.ssh/config"
+    read -p "Enter sshclip host: " -r cliphost
+    if [[ -z "$cliphost" ]]; then
+        echo "No host supplied"
+        exit 1
+    fi
+
+    mkdir -p "${HOME}/.ssh/control"
+
+    cat <<EOF >> "${HOME}/.ssh/config"
+
+Host sshclip-server
+    HostName ${cliphost}
+    User sshclip
+    IdentityFile ~/.ssh/id_sshclip
+    ControlMaster auto
+    ControlPersist 10m
+    ControlPath ~/.ssh/control/sshclip-server
+EOF
+
+    echo "Added config"
+fi
+
+cat <<EOF
+
+/!\\ Be sure to add the key to the server, and run the following commands
+before using the sshclip provider in nvim. You may otherwise be dropped to the
+shell when performing clipboard operations.
+
+The following ensures that there isn't a session already running:
+
+    ssh -O exit sshclip-server
+
+The following connects you to the server so you can verify the server's key if
+you never connected before, and to be sure you can actually connect.
+
+    ssh sshclip-server 'get primary'
+EOF
+
+# vim: set ts=4 sw=4 tw=0 et :
