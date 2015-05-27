@@ -106,29 +106,28 @@ int handle_clipboard_request(int argc, char *argv[], int restrictc, char *restri
 
     if (!put) {
         fd = fopen(store_filename, "rb");
-        if (fd == NULL) {
-            SC_ERRNO("Could not open file for reading: %s", store_filename);
-            fputs("\n", stdout);
-            return SC_EX_CMD;
+        if (fd != NULL) {
+            while ((rb = fread(buff_r, 1, 1024, fd)) != 0)
+            {
+                wb = fwrite(buff_r, 1, rb, stdout);
+                if (wb == 0) {
+                    errno = ferror(fd);  // Not sure if this is right
+                    SC_ERRNO("Could not write byte to: %s", store_filename);
+                    return SC_EX_CMD;
+                }
+                bytes_r += rb;
+                bytes_w += wb;
+                if (bytes_w >= MAX_READ_BYTES) {
+                    SC_LOG(LOG_WARNING, "Hit read limit for: %s", store_filename);
+                    break;
+                }
+            }
+
+            fclose(fd);
+        } else {
+            SC_LOG(LOG_DEBUG, "Could not open store: %s", store_filename);
         }
 
-        while ((rb = fread(buff_r, 1, 1024, fd)) != 0)
-        {
-            wb = fwrite(buff_r, 1, rb, stdout);
-            if (wb == 0) {
-                errno = ferror(fd);  // Not sure if this is right
-                SC_ERRNO("Could not write byte to: %s", store_filename);
-                return SC_EX_CMD;
-            }
-            bytes_r += rb;
-            bytes_w += wb;
-            if (bytes_w >= MAX_READ_BYTES) {
-                SC_LOG(LOG_WARNING, "Hit read limit for: %s", store_filename);
-                break;
-            }
-        }
-
-        fclose(fd);
         SC_LOG(LOG_DEBUG, "Wrote %d bytes and read %d from: %s", bytes_w, bytes_r, store_filename);
     } else if (put) {
         fd = fopen(store_filename, "wb");
