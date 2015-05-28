@@ -209,15 +209,17 @@ monitor() {
 
     store="clipboard"
     sys_clipboard_get=$(find_system_clipboard 1)
-    contents=$($sys_clipboard_get)
-    sys_clipboard_crc=$(echo "$contents" | cksum)
 
     if [[ -z "$sys_clipboard_get" ]]; then
         bail "System clipboard not found"
     fi
 
     while [[ monitor_run -eq 1 ]]; do
-        contents=$($sys_clipboard_get)
+        # Not sure if the following will cause problems for other systems.
+        # Conversion of \r to \n is for programs that still haven't updated their
+        # code to recognize that \r is not the line ending for OS X.
+        # *cough*synergy*cough*
+        contents=$($sys_clipboard_get | tr "\r" "\n")
         crc=$(echo "$contents" | cksum)
         if [[ "$crc" != "$sys_clipboard_crc" ]]; then
             sys_clipboard_crc="$crc"
