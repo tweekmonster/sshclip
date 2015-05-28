@@ -4,6 +4,7 @@ let s:exit = 0
 let s:stdout = []
 let s:stderr = []
 let s:regstore = {'+': 'clipboard', '*': 'primary'}
+let s:lastreg = ''
 
 let g:last_yank_pending = 0
 let g:last_yank = []
@@ -15,7 +16,18 @@ function! s:async_cb(job, data, event)
         let s:stderr = a:data
     elseif a:event == 'exit'
         let s:exit = a:data
-        echom 'Clipboard sent to sshclip'
+        if s:exit != 0
+            echohl ErrorMsg
+            echo '[sshclip] Error: '
+            echon join(s:stderr, ' - ')
+        else
+            echohl Title
+            echo printf('[sshclip] Register %s sent (%s)',
+                        \ s:lastreg, s:regstore[s:lastreg])
+        endif
+
+        echohl None
+
         if exists('s:job_id')
             unlet s:job_id
         endif
@@ -29,6 +41,7 @@ let s:callbacks = {
     \ }
 
 function! s:run_job(put, register, lines)
+    let s:lastreg = a:register
     let cmd = [s:bin, '-i', '-selection', s:regstore[a:register]]
     if !get(g:, 'clipboard_system_passthru', 1)
         let cmd += ['--no-passthru']
@@ -42,10 +55,6 @@ function! s:run_job(put, register, lines)
     endif
 
     call jobstop(s:job_id)
-
-    if s:exit != 0
-        echom 'Error: ' . join(s:stderr, '\n')
-    endif
 
     return s:stdout
 endfunction
@@ -74,7 +83,9 @@ function! s:clipboard.set(lines, type, register)
         endwhile
 
         if bl < minb
-            echomsg 'Not enough bytes to send to sshclip'
+            echohl WarningMsg
+            echomsg '[sshclip] Not enough bytes to send'
+            echohl None
             return
         endif
     endif
@@ -86,7 +97,7 @@ function! s:clipboard.get(register)
     let cmd = [s:bin, '-o', '-selection', s:regstore[a:register]]
     if exists('s:job_id')
         " Not sure if this is necessary
-        echomsg "Waiting for put job..."
+        echo "[sshclip] Waiting for put job..."
         call jobwait([s:job_id])
     endif
 
@@ -94,22 +105,28 @@ function! s:clipboard.get(register)
     let stderr_file = tempname()
     let cmd += ['2>', stderr_file]
     let stdout = systemlist(join(cmd, ' '), [''], 1)
-    let stderr = ''
+    let stderr = []
     let exit_status = v:shell_error
 
     if filereadable(stderr_file)
-        let stderr = join(readfile(stderr_file, '', 5), '\n')
+        let stderr = readfile(stderr_file, '', 5)
         call delete(stderr_file)
     endif
 
     if exit_status
-        let err_msg = 'sshclip error'
+        echohl ErrorMsg
+        echo '[sshclip] Error'
         if len(stderr)
-            let err_msg .= ': ' . stderr
+            echon ':' join(stderr, ' - ')
         endif
-        echo err_msg
         return ''
+    else
+        echohl Title
+        echo printf('[sshclip] Register %s retrieved (%s)',
+                    \ a:register, s:regstore[a:register])
     endif
+
+    echohl None
 
     return stdout
 endfunction
