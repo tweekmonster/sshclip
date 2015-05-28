@@ -17,6 +17,7 @@ Options:
     --impersonate       Create symlinks that impersonates another clipboard
                         program. Options are: osx, xclip, and xsel.
     --no-passthru       Don't attempt to pass yoinks to the system's clipboard.
+    --monitor           Monitor the system's clipboard to keep it in sync.
 
 This script is a client for sshclip-server which acts as a personal clipboard
 server that can be accessed over the network. The goal is to have a clipboard
@@ -103,6 +104,13 @@ resolve_links() {
 
 
 find_system_clipboard() {
+    # First argument is a boolean flag indicating we want the bin that
+    # retrieves the clipboard.
+    #
+    # This function is due to my ignorance of other system clipboards.
+    # This should be replaced by hard coded paths. I can't think of any reason
+    # the system clipboard programs would be in different locations.
+    paste="$1"
     self=$(resolve_links "${BASH_SOURCE[0]}")
     found=""
     clipboards=("pbcopy xclip xsel")
@@ -118,25 +126,107 @@ find_system_clipboard() {
 
     if [[ -n "$found" ]]; then
         found_name=$(basename "$found")
-        found_args=""
-        if [[ "$found_name" == "xclip" ]]; then
-            found_args="-i -selection \"$store\""
-        elif [[ "$found_name" == "xsel" ]]; then
-            found_args="-i"
-            case $store in
-                clipboard)
-                    found_args="$found_args -b"
-                    ;;
-                primary)
-                    found_args="$found_args -p"
-                    ;;
-                secondary)
-                    found_args="$found_args -s"
-                    ;;
-            esac
-        fi
+        found_args="-i"
+
+        case $found_name in
+            pbcopy)
+                found_args=""
+                [[ -n "$paste" ]] && found="${found/%pbcopy/pbpaste}"
+                ;;
+            xclip|xsel)
+                [[ -n "$paste" ]] && found_args="-o"
+                if [[ "$found_name" == "xsel" ]]; then
+                    case $store in
+                        clipboard)
+                            found_args="$found_args -b"
+                            ;;
+                        primary)
+                            found_args="$found_args -p"
+                            ;;
+                        secondary)
+                            found_args="$found_args -s"
+                            ;;
+                    esac
+                fi
+                ;;
+        esac
+
         echo "$found $found_args"
     fi
+}
+
+
+do_clipboard() {
+    if [[ -z "$action" ]]; then
+        show_help
+        exit 1
+    fi
+
+
+    case $store in
+        clipboard|primary|secondary)
+            ;;
+        *)
+            bail "Incorrect store, use: clipboard, primary, or secondary"
+            ;;
+    esac
+
+
+    # Using base64 to ensure data isn't mangled in transport
+    # sshclip-server strips what it recieves of non-printable characters
+    case $action in
+        put)
+            [[ $passthru -eq 1 ]] && passthru_cmd=$(find_system_clipboard)
+            if [[ -n "$passthru_cmd" && "$store" == "clipboard" ]]; then
+                logger "Passthru to: ${passthru_cmd}"
+                tee >($passthru_cmd) | head -c $max_bytes | base64 | $sshcmd "put $store"
+            else
+                head -c $max_bytes | base64 | $sshcmd "put $store"
+            fi
+            ;;
+        get)
+            $sshcmd "get ${store}" | base64 --decode
+            ;;
+        *)
+            bail "Uknown action: ${action}"
+            ;;
+    esac
+}
+
+
+monitor() {
+    monitor_run=1
+    pidfile="$HOME/.cache/sshclip_monitor.pid"
+
+    if [[ -e "$pidfile" ]]; then
+        kill -s 0 `cat $pidfile` && bail "Another instance is running"
+    else
+        mkdir -p "${pidfile%/*}"
+    fi
+
+    echo -n $$ > "$pidfile"
+    trap "rm -f '${pidfile}'" EXIT
+
+    store="clipboard"
+    sys_clipboard_get=$(find_system_clipboard 1)
+    contents=$($sys_clipboard_get)
+    sys_clipboard_crc=$(echo "$contents" | cksum)
+
+    if [[ -z "$sys_clipboard_get" ]]; then
+        bail "System clipboard not found"
+    fi
+
+    while [[ monitor_run -eq 1 ]]; do
+        contents=$($sys_clipboard_get)
+        crc=$(echo "$contents" | cksum)
+        if [[ "$crc" != "$sys_clipboard_crc" ]]; then
+            sys_clipboard_crc="$crc"
+            action="put"
+            echo "$contents" | do_clipboard 2> /dev/null
+        fi
+        contents=""
+        sleep 1
+    done
 }
 
 
@@ -171,9 +261,13 @@ if [[ $1 == "--impersonate" ]]; then
 
     impersonate $2
     exit 0
+elif [[ $1 == "--monitor" ]]; then
+    monitor
+    exit 0
 fi
 
 parse_args $@
+
 
 case $name in
     pbcopy)
@@ -192,39 +286,6 @@ case $name in
 esac
 
 
-if [[ -z "$action" ]]; then
-    show_help
-    exit 1
-fi
-
-
-case $store in
-    clipboard|primary|secondary)
-        ;;
-    *)
-        bail "Incorrect store, use: clipboard, primary, or secondary"
-        ;;
-esac
-
-
-# Using base64 to ensure data isn't mangled in transport
-# sshclip-server strips what it recieves of non-printable characters
-case $action in
-    put)
-        [[ $passthru -eq 1 ]] && passthru_cmd=$(find_system_clipboard)
-        if [[ -n "$passthru_cmd" ]]; then
-            logger "Passthru to: ${passthru_cmd}"
-            tee >($passthru_cmd) | head -c $max_bytes | base64 | $sshcmd "put $store"
-        else
-            head -c $max_bytes | base64 | $sshcmd "put $store"
-        fi
-        ;;
-    get)
-        $sshcmd "get ${store}" | base64 --decode
-        ;;
-    *)
-        bail "Uknown action: ${action}"
-        ;;
-esac
+do_clipboard
 
 # vim: set ts=4 sw=4 tw=0 et :
