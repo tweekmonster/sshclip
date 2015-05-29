@@ -15,7 +15,7 @@ sshclip-client [--impersonate [osx xclip xsel]] [-h]
 Options:
     -h                  This thing here
     --impersonate       Create symlinks that impersonates another clipboard
-                        program. Options are: osx, xclip, and xsel.
+                        program. Options are: osx, xclip, xsel, and sshclip.
     --no-passthru       Don't attempt to pass yoinks to the system's clipboard.
     --monitor           Monitor the system's clipboard to keep it in sync.
 
@@ -233,24 +233,42 @@ monitor() {
 
 
 impersonate() {
-    dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-    real="${dir}/$(basename "${BASH_SOURCE[0]}")"
+    dir="${HOME}/bin"
+    real=$(resolve_links "${BASH_SOURCE[0]}")
+    links=()
 
     case $1 in
         osx)
-            ln -s "${real}" "${dir}/pbcopy"
-            ln -s "${real}" "${dir}/pbpaste"
+            links=(
+                "${dir}/pbcopy"
+                "${dir}/pbpaste"
+            )
+            ;;
+        sshclip)
+            links=(
+                "${dir}/sshclip-get"
+                "${dir}/sshclip-put"
+            )
             ;;
         xclip)
-            ln -s "${real}" "${dir}/xclip"
+            links=(
+                "${dir}/xclip"
+            )
             ;;
         xsel)
-            ln -s "${real}" "${dir}/xsel"
+            links=(
+                "${dir}/xsel"
+            )
             ;;
         *)
             bail "Impersonate options: osx, xclip, or xsel"
             ;;
     esac
+
+    for link in  ${links[@]}; do
+        echo "Linking $link"
+        ln -s "$real" "$link"
+    done
 
     echo "Created symlinks for $1"
 }
@@ -279,6 +297,14 @@ case $name in
     pbpaste)
         action="get"
         store="clipboard"
+        ;;
+    sshclip-get)
+        action="get"
+        [[ -z "$store" ]] && store="clipboard"
+        ;;
+    sshclip-put)
+        action="put"
+        [[ -z "$store" ]] && store="clipboard"
         ;;
     xclip|xsel|sshclip-client)
         ;;
