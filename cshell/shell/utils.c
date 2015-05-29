@@ -10,7 +10,7 @@ int fd_readable(FILE *fd)
     struct pollfd pfd;
     pfd.fd = fileno(fd);
     pfd.events = POLLIN;
-    return poll(&pfd, 1, 500) == 1;
+    return poll(&pfd, 1, 15000) == 1;
 }
 
 
