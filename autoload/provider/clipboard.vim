@@ -48,13 +48,21 @@ function! s:run_job(put, register, lines)
     endif
 
     let s:job_id = jobstart(cmd, s:callbacks)
+    let data = join(a:lines, "\n")
+    let l = len(data)
+    let i = 0
+    let c = 1
+    " For some reason, the entire payload for data that exceeds ~8000 bytes
+    " doesn't get sent unless it's sent 1 byte at a time. Increasing the chunk
+    " size beyond 1 seems to cause loss, too.  Not sure if I'm overlooking
+    " something or I just really suck at vim script.
+    " Tested by copying the entire contents of the sshclip-client script.
+    while i < l
+        call jobsend(s:job_id, data[i : i+c])
+        let i += c + 1
+    endwhile
 
-    let job_r = jobsend(s:job_id, a:lines)
-    if job_r
-        call jobclose(s:job_id, 'stdin')
-    endif
-
-    call jobstop(s:job_id)
+    call jobclose(s:job_id, 'stdin')
 
     return s:stdout
 endfunction
