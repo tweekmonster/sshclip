@@ -174,18 +174,29 @@ do_clipboard() {
 
     # Using base64 to ensure data isn't mangled in transport
     # sshclip-server strips what it recieves of non-printable characters
+    # If ~/.sshclip_key exists and is not world readable, use aes-256 encryption
+    keyfile="${HOME}/.sshclip_key"
+    encoder="base64"
+    decdoer="base64 --decode"
+
+    if [[ -f "$keyfile" ]]; then
+        [[ -n $(find "$keyfile" -perm +0006) ]] && bail "$keyfile is world readable"
+        encoder="openssl aes-256-cbc -a -salt -pass file:$keyfile"
+        decoder="openssl aes-256-cbc -a -d -salt -pass file:$keyfile"
+    fi
+
     case $action in
         put)
             [[ $passthru -eq 1 ]] && passthru_cmd=$(find_system_clipboard)
             if [[ -n "$passthru_cmd" && "$store" == "clipboard" ]]; then
                 logger "Passthru to: ${passthru_cmd}"
-                tee >($passthru_cmd) | head -c $max_bytes | base64 | $sshcmd "put $store"
+                tee >($passthru_cmd) | head -c $max_bytes | $encoder | $sshcmd "put $store"
             else
-                head -c $max_bytes | base64 | $sshcmd "put $store"
+                head -c $max_bytes | $encoder | $sshcmd "put $store"
             fi
             ;;
         get)
-            $sshcmd "get ${store}" | base64 --decode
+            $sshcmd "get ${store}" | $decoder
             ;;
         *)
             bail "Uknown action: ${action}"
