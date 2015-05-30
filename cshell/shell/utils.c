@@ -1,17 +1,6 @@
-/* #include <sys/select.h> */
-#include <sys/poll.h>
-#include <sys/types.h>
 #include <sys/stat.h>
 #include <stdlib.h>
 #include "utils.h"
-
-int fd_readable(FILE *fd)
-{
-    struct pollfd pfd;
-    pfd.fd = fileno(fd);
-    pfd.events = POLLIN;
-    return poll(&pfd, 1, 15000) == 1;
-}
 
 
 int create_directory(const char *path, char *resolved) {

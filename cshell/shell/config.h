@@ -20,6 +20,12 @@
 // Maximum bytes that will be read before the rest of the stream is ignored.
 #define MAX_READ_BYTES 786432
 
+// Read chunk size
+#define READ_CHUNK 1024
+
+// Maximum seconds to wait for input data.
+#define PUT_TIMEOUT 5
+
 // Maximum number of arguments that will be read in SSH_ORIGINAL_COMMAND or argv.
 #define MAX_CMDS 5
 

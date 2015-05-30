@@ -1,6 +1,8 @@
 #include <stdlib.h>
 #include <time.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <sys/select.h>
 #include "main.h"
 #include "utils.h"
 
@@ -102,12 +104,12 @@ int handle_clipboard_request(int argc, char *argv[], int restrictc, char *restri
     int bytes_w = 0;
     size_t wb = 0;
     size_t rb = 0;
-    char buff_r[1024];
+    char buff_r[READ_CHUNK];
 
     if (!put) {
         fd = fopen(store_filename, "rb");
         if (fd != NULL) {
-            while ((rb = fread(buff_r, 1, 1024, fd)) != 0)
+            while ((rb = fread(buff_r, 1, READ_CHUNK, fd)) != 0)
             {
                 wb = fwrite(buff_r, 1, rb, stdout);
                 if (wb == 0) {
@@ -136,13 +138,40 @@ int handle_clipboard_request(int argc, char *argv[], int restrictc, char *restri
             return SC_EX_CMD;
         }
 
-        while (fd_readable(stdin) && (rb = fread(buff_r, 1, 1024, stdin)) != 0) {
+        fchmod(fileno(fd), S_IRUSR | S_IWUSR);
+
+        fd_set input;
+        struct timeval timeout;
+        time_t start = time(NULL);
+
+        while (1) {
+            time_t now = time(NULL);
+            if (now - start >= PUT_TIMEOUT) {
+                SC_LOG(LOG_DEBUG, "Waited too long for input");
+                return SC_EX_CMD;
+            }
+
+            timeout.tv_sec = 1;
+            timeout.tv_usec = 0;
+            FD_ZERO(&input);
+            FD_SET(STDIN_FILENO, &input);
+            select(STDIN_FILENO + 1, &input, NULL, NULL, &timeout);
+
+            if (!FD_ISSET(STDIN_FILENO, &input)) {
+                continue;
+            }
+
+            rb = fread(buff_r, 1, READ_CHUNK, stdin);
+            if (rb == 0) {
+                break;
+            }
+
             bytes_r += rb;
             if (is_valid_b64_str(buff_r, rb)) {
                 wb = fwrite(buff_r, 1, rb, fd);
                 if (wb == 0) {
                     errno = ferror(fd);  // Not sure if this is right
-                    SC_ERRNO("Could not write byte to: %s", store_filename);
+                    SC_ERRNO("Could not write to: %s", store_filename);
                     fclose(fd);
                     return SC_EX_CMD;
                 }
