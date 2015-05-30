@@ -5,7 +5,8 @@ action=""
 store=""
 passthru=1
 sshcmd=${SSHCLIP_SSHCMD:-"ssh sshclip-server"}
-# sshcmd="ssh -i $HOME/.ssh/id_sshclip sshclip@esdf.io"
+pidfile="$HOME/.cache/sshclip_monitor.pid"
+crcfile="$HOME/.cache/sshclip.crc"
 
 
 show_help() {
@@ -190,7 +191,7 @@ do_clipboard() {
             [[ $passthru -eq 1 ]] && passthru_cmd=$(find_system_clipboard)
             if [[ -n "$passthru_cmd" && "$store" == "clipboard" ]]; then
                 logger "Passthru to: ${passthru_cmd}"
-                tee >($passthru_cmd) | head -c $max_bytes | $encoder | $sshcmd "put $store"
+                tee >(cksum > "$crcfile") >($passthru_cmd) | head -c $max_bytes | $encoder | $sshcmd "put $store"
             else
                 head -c $max_bytes | $encoder | $sshcmd "put $store"
             fi
@@ -207,7 +208,6 @@ do_clipboard() {
 
 monitor() {
     monitor_run=1
-    pidfile="$HOME/.cache/sshclip_monitor.pid"
 
     if [[ -e "$pidfile" ]]; then
         kill -s 0 `cat $pidfile` && bail "Another instance is running"
@@ -231,7 +231,13 @@ monitor() {
         # code to recognize that \r is not the line ending for OS X.
         # *cough*synergy*cough*
         contents=$($sys_clipboard_get | tr "\r" "\n")
-        crc=$(echo "$contents" | cksum)
+        crc=$(echo -n "$contents" | cksum)
+        if [[ -f "$crcfile" ]]; then
+            outside_crc=$(cat "$crcfile")
+            rm "$crcfile"
+            [[ "$crc" == "$outside_crc" ]] && sys_clipboard_crc="$outside_crc"
+        fi
+
         if [[ "$crc" != "$sys_clipboard_crc" ]]; then
             sys_clipboard_crc="$crc"
             action="put"
