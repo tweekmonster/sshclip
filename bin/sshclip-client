@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 name="${BASH_SOURCE[0]##*/}"
 readonly max_bytes=262144  # 256 KiB, which is already a lot for text
 action=""

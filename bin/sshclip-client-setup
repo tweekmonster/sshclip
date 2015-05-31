@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 if [[ ! -e "${HOME}/.ssh/id_sshclip" ]]; then
     echo "Generating a key"
     echo ""

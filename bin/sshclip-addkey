@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 keyopts="no-agent-forwarding,no-port-forwarding,no-pty,no-user-rc,no-X11-forwarding"
 
 bail() {

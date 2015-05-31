@@ -1,4 +1,4 @@
-#!/bin/bash --noprofile
+#!/usr/bin/env bash --noprofile
 set -f
 # Client only reads first 256 KiB and base64 encodes it. ~340 KiB should be
 # enough to store it.

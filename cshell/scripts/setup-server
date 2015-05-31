@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 user="sshclip"
 home="/var/local/sshclip"
 useradd -c "sshclip account" -d "$home" -N -g nogroup -s /usr/local/bin/sshclip-shell "$user"
