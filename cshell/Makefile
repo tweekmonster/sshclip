@@ -1,16 +1,23 @@
 PREFIX = /usr/local
+JAIL_USER = sshclip
+JAIL_ROOT = /opt/jails/sshclip
 CC = gcc
 DEST = bin
 TARGET = $(DEST)/sshclip-shell
 OBJECTS = $(patsubst %.c, %.o, $(wildcard shell/*.c))
 HEADERS = $(wildcard src/*.h)
-CFLAGS = -g -Wall -std=gnu99 -O2
+CFLAGS = -Wall -std=gnu99 -O2
 
 .PHONY: default all bindir clean
 
 all: bindir default
-debug: CFLAGS += -DDEBUG
+debug: CFLAGS += -g -DDEBUG
 debug: all
+
+jail: all
+jail:
+	scripts/makejail $(JAIL_USER) $(JAIL_ROOT)
+	
 
 default: $(TARGET)
 
