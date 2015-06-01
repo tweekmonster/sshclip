@@ -6,7 +6,6 @@
 #include <errno.h>
 #include <unistd.h>
 #include <string.h>
-#include <pwd.h>
 #include <syslog.h>
 #include "config.h"
 

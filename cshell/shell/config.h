@@ -7,7 +7,7 @@
 // The directory for the store. This can contain multiple path components if
 // the directory is created. The store_create function does not do recursive
 // directory creation.
-#define STORE_BASE ".sshclip_store"
+#define STORE_BASE "/var/lib/sshclip"
 
 // Maximum length of commands passed to the shell, either through the command
 // line or through SSH_ORIGINAL_COMMAND. If this length is exceeded for either

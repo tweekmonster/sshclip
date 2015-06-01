@@ -37,25 +37,12 @@ int create_directory(const char *path, char *resolved) {
 }
 
 
-int store_create(const char *home, const char *user, size_t size) {
-    // Don't need need to recursively create directories.
-    struct stat s;
-
-    // First check if the home exists, because it should
-    if (stat(home, &s) == -1 || !S_ISDIR(s.st_mode)) {
-        if (S_ISDIR(s.st_mode)) {
-            SC_LOG(LOG_ERR, "Home path is not a directory: %s", home);
-        }
-        SC_ERRNO("Could not stat home directory: %s", home);
-        return 0;
-    }
-
+int store_create(const char *user, size_t size) {
     char store_path[size];
     char resolved[size];
     int ret;
 
-    ret = snprintf(store_path, size, "%s/%s", home, STORE_BASE);
-    if (ret && create_directory(store_path, resolved)) {
+    if (create_directory(STORE_BASE, resolved)) {
         if (user != NULL) {
             ret = snprintf(store_path, size, "%s/%s", resolved, user);
             if (ret && create_directory(store_path, resolved)) {
@@ -71,17 +58,13 @@ int store_create(const char *home, const char *user, size_t size) {
 
 int store_directory(const char *user, char *path, size_t size)
 {
-    uid_t uid = getuid();
-    // Valgrind reports a leak here, see under BUGS in getpwent(3)
-    struct passwd *pw = getpwuid(uid);
-
     int ret = 0;
     char store_path[size];
 
     if (user != NULL) {
-        ret = snprintf(store_path, size, "%s/%s/%s", pw->pw_dir, STORE_BASE, user);
+        ret = snprintf(store_path, size, "%s/%s", STORE_BASE, user);
     } else {
-        ret = snprintf(store_path, size, "%s/%s", pw->pw_dir, STORE_BASE);
+        ret = snprintf(store_path, size, "%s", STORE_BASE);
     }
 
     if (ret > size - 1) {
@@ -96,7 +79,7 @@ int store_directory(const char *user, char *path, size_t size)
         if (e == -1) {
             if (errno == ENOENT) {
                 SC_LOG(LOG_WARNING, "Store directory does not exist: %s", store_path);
-                if (!store_create(pw->pw_dir, user, size)) {
+                if (!store_create(user, size)) {
                     SC_LOG(LOG_ERR, "Could not create store directory");
                     return 0;
                 }
