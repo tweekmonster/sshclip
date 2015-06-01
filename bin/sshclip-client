@@ -241,7 +241,7 @@ monitor() {
         if [[ "$crc" != "$sys_clipboard_crc" ]]; then
             sys_clipboard_crc="$crc"
             action="put"
-            echo "$contents" | do_clipboard 2> /dev/null
+            echo -n "$contents" | do_clipboard 2> /dev/null
         fi
         contents=""
         sleep 1
