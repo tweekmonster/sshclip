@@ -209,13 +209,6 @@ do_clipboard() {
 monitor() {
     monitor_run=1
 
-    if [[ -e "$pidfile" ]]; then
-        kill -s 0 `cat $pidfile` && bail "Another instance is running"
-    else
-        mkdir -p "${pidfile%/*}"
-    fi
-
-    echo -n $$ > "$pidfile"
     trap "rm -f '${pidfile}'" EXIT
 
     store="clipboard"
@@ -298,8 +291,30 @@ if [[ $1 == "--impersonate" ]]; then
 
     impersonate $2
     exit 0
+elif [[ $1 == "--kill" ]]; then
+    if [[ -e "$pidfile" ]]; then
+        running_pid=$(cat $pidfile)
+        >&2 echo "Killing ${running_pid}"
+        kill -s 15 $running_pid
+        exit 0
+    else
+        bail "Not running"
+    fi
 elif [[ $1 == "--monitor" ]]; then
-    monitor
+    if [[ -e "$pidfile" ]]; then
+        kill -s 0 `cat $pidfile` && bail "Another instance is running"
+    else
+        mkdir -p "${pidfile%/*}"
+    fi
+
+    if [[ $2 == "--daemonize" ]]; then
+        monitor &
+        echo -n $! > "$pidfile"
+        disown
+    else
+        echo -n $$ > "$pidfile"
+        monitor
+    fi
     exit 0
 fi
 
