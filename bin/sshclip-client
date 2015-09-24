@@ -15,6 +15,20 @@ if [[ ! -d "$cache" ]]; then
     mkdir -p "$cache"
 fi
 
+# Using base64 to ensure data isn't mangled in transport
+# sshclip-server strips what it recieves of non-printable characters
+# If ~/.sshclip_key exists and is not world readable, use aes-256 encryption
+keyfile="${HOME}/.sshclip_key"
+encoder="base64"
+decoder="base64 --decode"
+
+if [[ -f "$keyfile" ]]; then
+    [[ -n $(find "$keyfile" -perm +0006) ]] && bail "$keyfile is world readable"
+    encoder="openssl aes-256-cbc -a -salt -pass file:$keyfile"
+    decoder="openssl aes-256-cbc -a -d -salt -pass file:$keyfile"
+fi
+
+
 show_help() {
     cat <<EOF
 sshclip-client [--impersonate [osx xclip xsel]] [-h]
@@ -125,7 +139,8 @@ find_system_clipboard() {
                 ;;
         esac
 
-        echo "$found $found_args"
+        cb_cmd="$found $found_args"
+        echo "${cb_cmd// /}"
     fi
 }
 
@@ -133,7 +148,8 @@ find_system_clipboard() {
 send_clipboard() {
     [[ $passthru -eq 1 ]] && passthru_cmd=$(find_system_clipboard)
     if [[ -n "$passthru_cmd" && "$store" == "clipboard" ]]; then
-        tee "$1" >(cksum > "$crcfile") >($passthru_cmd) > /dev/null
+        cat "$1" | cksum > "$crcfile"
+        cat "$1" | "$passthru_cmd"
     fi
 
     head -c $max_bytes "$1" | $encoder | $sshcmd "put $store"
@@ -155,19 +171,6 @@ do_clipboard() {
             bail "Incorrect store, use: clipboard, primary, or secondary"
             ;;
     esac
-
-    # Using base64 to ensure data isn't mangled in transport
-    # sshclip-server strips what it recieves of non-printable characters
-    # If ~/.sshclip_key exists and is not world readable, use aes-256 encryption
-    keyfile="${HOME}/.sshclip_key"
-    encoder="base64"
-    decoder="base64 --decode"
-
-    if [[ -f "$keyfile" ]]; then
-        [[ -n $(find "$keyfile" -perm +0006) ]] && bail "$keyfile is world readable"
-        encoder="openssl aes-256-cbc -a -salt -pass file:$keyfile"
-        decoder="openssl aes-256-cbc -a -d -salt -pass file:$keyfile"
-    fi
 
     case $action in
         put)
@@ -194,10 +197,12 @@ do_clipboard() {
 
 monitor() {
     monitor_run=1
+    monitor_tmpfile=$(mktemp "$cache/clipboard_tmp.XXXXXXXXXX")
 
-    trap "rm -f '${pidfile}'" EXIT
+    trap "rm -f '${pidfile}' '${monitor_tmpfile}' '${crcfile}'" EXIT
 
     store="clipboard"
+    action="put"
     sys_clipboard_get=$(find_system_clipboard 1)
 
     if [[ -z "$sys_clipboard_get" ]]; then
@@ -209,8 +214,9 @@ monitor() {
         # Conversion of \r to \n is for programs that still haven't updated their
         # code to recognize that \r is not the line ending for OS X.
         # *cough*synergy*cough*
-        contents=$($sys_clipboard_get | tr "\r" "\n")
-        crc=$(echo -n "$contents" | cksum)
+        $sys_clipboard_get | tr "\r" "\n" > "$monitor_tmpfile"
+        # contents=$($sys_clipboard_get | tr "\r" "\n")
+        crc=$(cat "$monitor_tmpfile" | cksum)
         if [[ -f "$crcfile" ]]; then
             outside_crc=$(cat "$crcfile")
             rm "$crcfile"
@@ -219,8 +225,7 @@ monitor() {
 
         if [[ "$crc" != "$sys_clipboard_crc" ]]; then
             sys_clipboard_crc="$crc"
-            action="put"
-            echo -n "$contents" | do_clipboard 2> /dev/null
+            cat "$monitor_tmpfile" | do_clipboard
         fi
         contents=""
         sleep 1
