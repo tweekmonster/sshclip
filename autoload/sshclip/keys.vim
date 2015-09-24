@@ -9,6 +9,15 @@ let s:maps = [
 let s:registers = ['"', '-', ':', '.', '%', '#', '=', '*', '+', '-', '_', '/']
 let s:ro_registers = [':', '.', '%', '#']
 
+
+function! s:can_vmap(k)
+    if len(a:k) == 2 && a:k[0] == a:k[1]
+        return 0
+    endif
+    return 1
+endfunction
+
+
 function! sshclip#keys#setup_interface()
     nnoremap <silent> <Plug>(sshclip-op-y) :<C-u>set operatorfunc=sshclip#emulator#op_yank<Return>g@
     nnoremap <silent> <Plug>(sshclip-op-d) :<C-u>set operatorfunc=sshclip#emulator#op_delete<Return>g@
@@ -29,7 +38,7 @@ function! sshclip#keys#setup_interface()
                 endif
 
                 execute 'nnoremap <silent> <Plug>(sshclip-' . r . '-' . k . ') :<C-u>call sshclip#emulator#handle(''' . m_type . ''', ''' . r . ''', ''' . k . ''', '''')<Return>'
-                if k != 'yy' && k != 'dd'
+                if s:can_vmap(k)
                     execute 'vnoremap <silent> <Plug>(sshclip-' . r . '-' . k . ') :<C-u>call sshclip#emulator#handle(''' . m_type . ''', ''' . r. ''', ''' . k . ''', visualmode())<Return>'
                 endif
             endfor
@@ -50,13 +59,15 @@ function! sshclip#keys#setup_keymap()
                 if r == '*'
                     execute 'silent! nmap ' . k . ' <Plug>(sshclip-' . r . '-' . k . ')'
 
-                    if k != 'yy' && k != 'dd'
+                    if s:can_vmap(k)
                         execute 'silent! vmap ' . k . ' <Plug>(sshclip-' . r . '-' . k . ')'
                     endif
                 endif
 
                 execute 'silent! nmap "' . r . k . ' <Plug>(sshclip-' . r . '-' . k . ')'
-                execute 'silent! vmap "' . r . k . ' <Plug>(sshclip-' . r . '-' . k . ')'
+                if s:can_vmap(k)
+                    execute 'silent! vmap "' . r . k . ' <Plug>(sshclip-' . r . '-' . k . ')'
+                endif
             endfor
         endfor
     endfor
