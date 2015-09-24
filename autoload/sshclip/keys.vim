@@ -5,7 +5,7 @@ let s:maps = [
             \ ]
 
 " Unfortunately have to map all register shortcuts so that maps without a
-" register prefix can set unnamed to *
+" register prefix can set unnamed to * (e.g. y, d, dd)
 let s:registers = ['"', '-', ':', '.', '%', '#', '=', '*', '+', '-', '_', '/']
 let s:ro_registers = [':', '.', '%', '#']
 
