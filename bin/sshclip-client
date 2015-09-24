@@ -23,7 +23,7 @@ encoder="base64"
 decoder="base64 --decode"
 
 if [[ -f "$keyfile" ]]; then
-    [[ -n $(find "$keyfile" -perm +0006) ]] && bail "$keyfile is world readable"
+    [[ -n $(find "$keyfile" -perm +0006) ]] && bail "$keyfile is world readable!!!"
     encoder="openssl aes-256-cbc -a -salt -pass file:$keyfile"
     decoder="openssl aes-256-cbc -a -d -salt -pass file:$keyfile"
 fi
