@@ -1,5 +1,3 @@
-let s:path = expand('<sfile>:p:h')
-let s:bin = resolve(printf('%s/../../bin/sshclip-client', s:path))
 let s:exit = 0
 let s:stdout = []
 let s:stderr = []
@@ -17,16 +15,8 @@ function! s:async_cb(job, data, event)
     elseif a:event == 'exit'
         let s:exit = a:data
         if s:exit != 0
-            echohl ErrorMsg
-            echo '[sshclip] Error: '
-            echon join(s:stderr, ' - ')
-        else
-            echohl Title
-            echo printf('[sshclip] Register %s sent (%s)',
-                        \ s:lastreg, s:regstore[s:lastreg])
+            call sshclip#misc#err(':', join(s:stderr, ' - '))
         endif
-
-        echohl None
 
         if exists('s:job_id')
             unlet s:job_id
@@ -42,7 +32,7 @@ let s:callbacks = {
 
 function! s:run_job(put, register, lines)
     let s:lastreg = a:register
-    let cmd = [s:bin, '-i', '-selection', s:regstore[a:register]]
+    let cmd = sshclip#misc#command('-i', '-selection', s:regstore[a:register])
     if !get(g:, 'clipboard_system_passthru', 1)
         let cmd += ['--no-passthru']
     endif
@@ -74,38 +64,19 @@ endfunction
 let s:clipboard = {}
 
 function! s:clipboard.set(lines, type, register)
-    let minb = get(g:, 'clipboard_min_bytes', 0)
-    if minb
-        let excl_ws = get(g:, 'clipboard_exclude_whitespace', 1)
-        let i = 0
-        let l = len(a:lines)
-        let bl = 0
-
-        while i < l
-            let line = get(a:lines, i, '')
-            let bl += len(excl_ws ? s:trim(line) : line)
-            if bl >= minb
-                break
-            endif
-            let i += 1
-        endwhile
-
-        if bl < minb
-            echohl WarningMsg
-            echomsg '[sshclip] Not enough bytes to send'
-            echohl None
-            return
-        endif
+    if sshclip#misc#can_send_lines(a:lines)
+        call s:run_job(1, a:register, a:lines)
+        call sshclip#misc#set_status(a:register, 1)
+    else
+        call sshclip#misc#set_status('!', 1)
     endif
-
-    call s:run_job(1, a:register, a:lines)
 endfunction
 
 function! s:clipboard.get(register)
-    let cmd = [s:bin, '-o', '-selection', s:regstore[a:register]]
+    let cmd = sshclip#misc#command('-o', '-selection', s:regstore[a:register])
     if exists('s:job_id')
         " Not sure if this is necessary
-        echo "[sshclip] Waiting for put job..."
+        call sshclip#misc#msg('Waiting for put job...')
         call jobwait([s:job_id])
     endif
 
@@ -122,19 +93,15 @@ function! s:clipboard.get(register)
     endif
 
     if exit_status
-        echohl ErrorMsg
-        echo '[sshclip] Error'
         if len(stderr)
-            echon ':' join(stderr, ' - ')
+            call sshclip#misc#err(':', join(stderr, ' - '))
+        else
+            call sshclip#misc#err()
         endif
         return ''
     else
-        echohl Title
-        echo printf('[sshclip] Register %s retrieved (%s)',
-                    \ a:register, s:regstore[a:register])
+        call sshclip#misc#set_status(a:register, 0)
     endif
-
-    echohl None
 
     return stdout
 endfunction

@@ -4,5 +4,17 @@ endif
 
 let g:clipboard_setup = 1
 
-call sshclip#keys#setup_interface()
-call sshclip#keys#setup_keymap()
+
+function! s:setup()
+    call sshclip#keys#setup_interface()
+    call sshclip#keys#setup_keymap()
+
+    if get(g:, 'clipboard_monitor')
+        call sshclip#misc#msg('Starting clipboard monitor')
+        call system(sshclip#misc#command_str('--monitor', '--background'))
+    endif
+endfunction
+
+
+autocmd VimEnter * :call s:setup()
+autocmd User AirlineAfterInit call sshclip#misc#setup_airline()

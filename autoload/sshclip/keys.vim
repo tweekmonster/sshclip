@@ -46,6 +46,7 @@ function! sshclip#keys#setup_interface()
     endfor
 endfunction
 
+
 function! sshclip#keys#setup_keymap()
     for m in s:maps
         let m_type = m[0]
