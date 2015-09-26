@@ -4,9 +4,6 @@ let s:regstore = {'+': 'clipboard', '*': 'primary'}
 let s:status = ''
 let s:encryption_key = expand('~/.cache/sshclip/.sshclip_key')
 
-" Cache command strings to avoid the repeated function call and join
-let s:commands = {'*': {}, '+': {}}
-
 
 function! sshclip#misc#command(...)
     let cmd = [s:bin] + a:000
@@ -49,7 +46,10 @@ function! sshclip#misc#set_encryption_key()
         let secret = inputsecret('[sshclip] Enter a secret key: ')
         let secret2 = inputsecret('[sshclip] Verify secret key: ')
         if secret ==# secret2
-            call mkdir(fnamemodify(s:encryption_key, ':p:h'), 'p')
+            let cache_dir = fnamemodify(s:encryption_key, ':p:h')
+            if !isdirectory(cache_dir)
+                call mkdir(cache_dir, 'p')
+            endif
             call writefile([secret], s:encryption_key, 'b')
             call system(printf('chmod 0600 %s', s:encryption_key))
             call system(sshclip#misc#command_str('--kill'))
@@ -68,10 +68,7 @@ function! sshclip#misc#init()
         call sshclip#keys#setup_keymap()
     endif
 
-    let s:commands['*']['get'] = sshclip#misc#command_str('-o', '-selection', 'primary')
-    let s:commands['*']['put'] = sshclip#misc#command_str('-i', '-selection', 'primary', '--background')
-    let s:commands['+']['get'] = sshclip#misc#command_str('-o', '-selection', 'clipboard')
-    let s:commands['+']['put'] = sshclip#misc#command_str('-i', '-selection', 'clipboard', '--background')
+    call sshclip#register#update_commands()
 
     if get(g:, 'sshclip_enable_encryption', 1)
         if !filereadable(s:encryption_key)
