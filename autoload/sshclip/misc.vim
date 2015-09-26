@@ -2,31 +2,87 @@ let s:path = expand('<sfile>:p:h')
 let s:bin = resolve(printf('%s/../../bin/sshclip-client', s:path))
 let s:regstore = {'+': 'clipboard', '*': 'primary'}
 let s:status = ''
+let s:encryption_key = expand('~/.cache/sshclip/.sshclip_key')
+
+" Cache command strings to avoid the repeated function call and join
+let s:commands = {'*': {}, '+': {}}
 
 
 function! sshclip#misc#command(...)
-    return [s:bin] + a:000
+    let cmd = [s:bin] + a:000
+    if !get(g:, 'sshclip_enable_encryption', 1)
+        return cmd + ['--no-encryption']
+    endif
+    return cmd
 endfunction
 
 
 function! sshclip#misc#command_str(...)
-    return join([s:bin] + a:000, ' ')
+    return sshclip#misc#trim(join([s:bin] + a:000, ' '))
 endfunction
 
 
 function! sshclip#misc#msg(...)
     echohl Title
-    echo '[sshclip] '
-    echon join(a:000, ' ')
+    echo join(['[sshclip]'] + a:000, ' ')
     echohl None
 endfunction
 
 
 function! sshclip#misc#err(...)
     echohl ErrorMsg
-    echo '[sshclip] Error'
-    echon join(a:000, ' ')
+    echomsg join(['[sshclip]'] + a:000, ' ')
     echohl None
+endfunction
+
+
+function! sshclip#misc#start_monitor(encryption)
+    if get(g:, 'clipboard_monitor')
+        call sshclip#misc#msg('Starting clipboard monitor')
+        call system(sshclip#misc#command_str('--monitor', '--background'))
+    endif
+endfunction
+
+
+function! sshclip#misc#set_encryption_key()
+    while 1
+        let secret = inputsecret('[sshclip] Enter a secret key: ')
+        let secret2 = inputsecret('[sshclip] Verify secret key: ')
+        if secret ==# secret2
+            call mkdir(fnamemodify(s:encryption_key, ':p:h'), 'p')
+            call writefile([secret], s:encryption_key, 'b')
+            call system(printf('chmod 0600 %s', s:encryption_key))
+            call system(sshclip#misc#command_str('--kill'))
+            call sshclip#misc#init()
+            break
+        endif
+        call sshclip#misc#err('Keys don''t match!')
+    endwhile
+endfunction
+
+
+function! sshclip#misc#init()
+    if !has('nvim') && !exists('s:vim_key_setup')
+        let s:vim_key_setup = 1
+        call sshclip#keys#setup_interface()
+        call sshclip#keys#setup_keymap()
+    endif
+
+    let s:commands['*']['get'] = sshclip#misc#command_str('-o', '-selection', 'primary')
+    let s:commands['*']['put'] = sshclip#misc#command_str('-i', '-selection', 'primary', '--background')
+    let s:commands['+']['get'] = sshclip#misc#command_str('-o', '-selection', 'clipboard')
+    let s:commands['+']['put'] = sshclip#misc#command_str('-i', '-selection', 'clipboard', '--background')
+
+    if get(g:, 'sshclip_enable_encryption', 1)
+        if !filereadable(s:encryption_key)
+            call sshclip#misc#err('Encryption key is not readable.  Run :SSHClipKey or set g:sshclip_enable_encryption to 0')
+            return
+        endif
+        call sshclip#misc#start_monitor(1)
+    else
+        call sshclip#misc#start_monitor(0)
+    endif
+
 endfunction
 
 

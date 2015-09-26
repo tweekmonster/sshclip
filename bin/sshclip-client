@@ -6,26 +6,19 @@ store=""
 passthru=1
 mode=0
 background=0
+use_encryption=1
 sshcmd=${SSHCLIP_SSHCMD:-"ssh sshclip-server"}
 cache="$HOME/.cache/sshclip"
 pidfile="$cache/monitor.pid"
 crcfile="$cache/system_clipboard_crc"
 
-if [[ ! -d "$cache" ]]; then
-    mkdir -p "$cache"
-fi
-
-# Using base64 to ensure data isn't mangled in transport
-# sshclip-server strips what it recieves of non-printable characters
-# If ~/.sshclip_key exists and is not world readable, use aes-256 encryption
-keyfile="${HOME}/.sshclip_key"
+# See setup_filters() below
+keyfile="$cache/.sshclip_key"
 encoder="base64"
 decoder="base64 --decode"
 
-if [[ -f "$keyfile" ]]; then
-    [[ -n $(find "$keyfile" -perm +0006) ]] && bail "$keyfile is world readable!!!"
-    encoder="openssl aes-256-cbc -a -salt -pass file:$keyfile"
-    decoder="openssl aes-256-cbc -a -d -salt -pass file:$keyfile"
+if [[ ! -d "$cache" ]]; then
+    mkdir -p "$cache"
 fi
 
 
@@ -40,6 +33,7 @@ Options:
     --no-passthru       Don't attempt to pass yoinks to the system's clipboard.
     --monitor           Monitor the system's clipboard to keep it in sync.
     --background        Run the script in the background.
+    --no-encryption     Disable encryption.
 
 This script is a client for sshclip-server which acts as a personal clipboard
 server that can be accessed over the network. The goal is to have a clipboard
@@ -73,6 +67,19 @@ EOF
 bail() {
     >&2 echo "$1"
     exit 1
+}
+
+
+setup_filters() {
+    # Using base64 to ensure data isn't mangled in transport
+    # sshclip-server strips what it recieves of non-printable characters
+    # If .sshclip_key exists and is not world readable, use aes-256 encryption
+    if [[ $use_encryption -eq 1 ]]; then
+        [[ ! -f "$keyfile" ]] && bail "$keyfile does not exist!  Disable encryption or set it up by using :SSHClipKey in Vim."
+        [[ -n $(find "$keyfile" -perm +0006) ]] && bail "$keyfile is world readable!!!"
+        encoder="openssl aes-256-cbc -a -salt -pass file:$keyfile"
+        decoder="openssl aes-256-cbc -a -d -salt -pass file:$keyfile"
+    fi
 }
 
 
@@ -338,6 +345,9 @@ parse_args() {
             --bg|--background)
                 background=1
                 ;;
+            --no-encryption)
+                use_encryption=0
+                ;;
         esac
         shift
     done
@@ -354,6 +364,8 @@ if [[ $1 == "--impersonate" ]]; then
 fi
 
 parse_args $@
+setup_filters
+
 
 if [[ $mode -gt 0 ]]; then
     if [[ $mode -eq 1 ]]; then
