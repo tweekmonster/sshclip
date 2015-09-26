@@ -38,9 +38,13 @@ function! sshclip#emulator#handle(type, register, key, motion)
         let &selection = o_selection
 
         if a:type == 'paste'
-            let @@ = system(s:commands[a:register]['get'])
+            let @@ = sshclip#register#get(a:register)
+            if a:motion == 'v'
+                normal! y
+                normal! gv
+                call sshclip#register#put('*', '1', getreg('"'), getregtype('"'))
+            endif
             execute 'normal! ' c . a:key
-            call sshclip#misc#set_status(a:register, 0)
         else
             let local_register = '0'
             if a:type == 'delete'
@@ -52,16 +56,7 @@ function! sshclip#emulator#handle(type, register, key, motion)
             endif
 
             execute 'normal! ' c . a:key
-            let data = getreg('"')
-
-            if sshclip#misc#can_send_str(data)
-                call system(s:commands[a:register]['put'], data)
-                call sshclip#misc#set_status(a:register, 1)
-            else
-                call sshclip#misc#set_status('!', 1)
-            endif
-
-            call setreg(local_register, data, getregtype('"'))
+            call sshclip#register#put(a:register, local_register, getreg('"'), getregtype('"'))
         endif
     endif
 
