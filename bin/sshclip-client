@@ -195,6 +195,21 @@ do_clipboard() {
 }
 
 
+check_sessions() {
+    # Check to see if there are running Vim or NeoVim processes and quit if
+    # there are none running.
+    running=$(ps -u $USER -o comm | grep 'vim' | xargs basename)
+    count=0
+    for name in $running; do
+        [[ "$name" == "vim" || "$name" == "nvim" ]] && (( count+=1 ))
+    done
+
+    if [[ $count -eq 0 ]]; then
+        exit 0
+    fi
+}
+
+
 monitor() {
     monitor_run=1
     monitor_tmpfile=$(mktemp "$cache/clipboard_tmp.XXXXXXXXXX")
@@ -228,7 +243,10 @@ monitor() {
             cat "$monitor_tmpfile" | do_clipboard
         fi
         contents=""
-        sleep 1
+        sleep 0.5
+
+        # Random check of running Vim processes
+        (( $RANDOM % 50 == 0 )) && check_sessions
     done
 }
 
