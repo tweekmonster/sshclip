@@ -17,6 +17,7 @@ endfunction
 
 
 function! sshclip#emulator#op_change(motion)
+    echomsg 'Motion: ' . a:motion
     return sshclip#emulator#handle('delete', '*', 'c', a:motion)
 endfunction
 
@@ -73,7 +74,11 @@ function! sshclip#emulator#handle(type, register, key, motion)
 
             " A change should put the user back into insert mode
             if a:key ==? 'c'
-                call feedkeys('a')
+                if col('.') == 1
+                    call feedkeys('i')
+                else
+                    call feedkeys('a')
+                endif
             endif
         endif
     endif
