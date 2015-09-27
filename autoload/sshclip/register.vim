@@ -12,7 +12,7 @@ endfunction
 
 
 function! sshclip#register#put(register, local_register, data, regtype)
-    if has('nvim')
+    if type(a:data) == 3
         let data = join(a:data, "\n")
     else
         let data = a:data
@@ -45,7 +45,7 @@ function! sshclip#register#get(register)
         call sshclip#misc#set_status(a:register, 0)
     endif
     if has('nvim')
-        return split(data, "\n")
+        return split(data, "\n", 1)
     endif
     return data
 endfunction
