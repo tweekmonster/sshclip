@@ -20,7 +20,12 @@ function! sshclip#register#put(register, local_register, data, regtype)
 
     if sshclip#misc#can_send_str(data)
         call system(s:commands[a:register]['put'], data)
-        call sshclip#misc#set_status(a:register, 1)
+        if v:shell_error
+            call sshclip#misc#err(v:shell_error)
+            return
+        else
+            call sshclip#misc#set_status(a:register, 1)
+        endif
     else
         call sshclip#misc#set_status('!', 1)
     endif
@@ -33,7 +38,12 @@ endfunction
 
 function! sshclip#register#get(register)
     let data = system(s:commands[a:register]['get'])
-    call sshclip#misc#set_status(a:register, 0)
+    if v:shell_error
+        call sshclip#misc#err(v:shell_error)
+        return
+    else
+        call sshclip#misc#set_status(a:register, 0)
+    endif
     if has('nvim')
         return split(data, "\n")
     endif

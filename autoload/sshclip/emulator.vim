@@ -16,12 +16,21 @@ function! sshclip#emulator#op_delete(motion)
 endfunction
 
 
+function! sshclip#emulator#op_change(motion)
+    return sshclip#emulator#handle('delete', '*', 'c', a:motion)
+endfunction
+
+
 function! sshclip#emulator#handle(type, register, key, motion)
-    let c = (v:count == v:count1) ? v:count : ''
+    let key_count = (v:count == v:count1) ? v:count : ''
 
     if a:register != '*' && a:register != '+'
-        execute 'normal! ' c . '"' . a:register . a:key
+        " Ignore all other registers and run their original command
+        execute 'normal! ' key_count . '"' . a:register . a:key
     else
+        " If motions are sent through from the operator functions, select
+        " their appropriate ranges.  Otherwise, a:motion will indicate whether
+        " or not the command was from visual mode.
         let o_selection = &selection
         let &selection = 'inclusive'
 
@@ -37,26 +46,35 @@ function! sshclip#emulator#handle(type, register, key, motion)
 
         let &selection = o_selection
 
+        " Emulate the command using the unnamed buffer then send or retrieve
+        " the desired register from the command line.
         if a:type == 'paste'
             let @@ = sshclip#register#get(a:register)
             if a:motion == 'v'
+                " A visual paste replaces text.  The replaced text should be
+                " placed back into the unnamed buffer.
                 normal! y
                 normal! gv
                 call sshclip#register#put('*', '1', getreg('"'), getregtype('"'))
             endif
-            execute 'normal! ' c . a:key
+            execute 'normal! ' key_count . a:key
         else
             let local_register = '0'
             if a:type == 'delete'
-                if a:key ==? 'x'
+                if a:key ==? 'x' || a:key ==? 'c'
                     let local_register = '-'
                 else
                     let local_register = '1'
                 endif
             endif
 
-            execute 'normal! ' c . a:key
+            execute 'normal! ' key_count . a:key
             call sshclip#register#put(a:register, local_register, getreg('"'), getregtype('"'))
+
+            " A change should put the user back into insert mode
+            if a:key ==? 'c'
+                call feedkeys('a')
+            endif
         endif
     endif
 

@@ -1,6 +1,6 @@
 let s:maps = [
             \ ['yank', ['y', 'yy', 'Y']],
-            \ ['delete', ['x', 'X', 'd', 'dd', 'D']],
+            \ ['delete', ['c', 'cc', 'C', 'x', 'X', 'd', 'dd', 'D']],
             \ ['paste', ['p', 'P', 'gp', 'gP', ']p', ']P', '[p', '[P']],
             \ ]
 
@@ -20,6 +20,9 @@ endfunction
 
 function! sshclip#keys#setup_interface()
     nnoremap <silent> <Plug>(sshclip-op-y) :<C-u>set operatorfunc=sshclip#emulator#op_yank<Return>g@
+    nnoremap <silent> <Plug>(sshclip-op-c) :<C-u>set operatorfunc=sshclip#emulator#op_change<Return>g@
+    nnoremap <silent> <Plug>(sshclip-op-cc) :<C-u>set operatorfunc=sshclip#emulator#op_change<Return>g@g@
+    nnoremap <silent> <Plug>(sshclip-op-C) :<C-u>set operatorfunc=sshclip#emulator#op_change<Return>g@$
     nnoremap <silent> <Plug>(sshclip-op-d) :<C-u>set operatorfunc=sshclip#emulator#op_delete<Return>g@
     nnoremap <silent> <Plug>(sshclip-op-dd) :<C-u>set operatorfunc=sshclip#emulator#op_delete<Return>g@g@
     nnoremap <silent> <Plug>(sshclip-op-D) :<C-u>set operatorfunc=sshclip#emulator#op_delete<Return>g@$
@@ -74,6 +77,9 @@ function! sshclip#keys#setup_keymap()
     endfor
 
 
+    silent! nmap c <Plug>(sshclip-op-c)
+    silent! nmap cc <Plug>(sshclip-op-cc)
+    silent! nmap c <Plug>(sshclip-op-C)
     silent! nmap y <Plug>(sshclip-op-y)
     silent! nmap d <Plug>(sshclip-op-d)
     silent! nmap dd <Plug>(sshclip-op-dd)
