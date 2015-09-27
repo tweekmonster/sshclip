@@ -79,7 +79,7 @@ function! sshclip#keys#setup_keymap()
 
     silent! nmap c <Plug>(sshclip-op-c)
     silent! nmap cc <Plug>(sshclip-op-cc)
-    silent! nmap c <Plug>(sshclip-op-C)
+    silent! nmap C <Plug>(sshclip-op-C)
     silent! nmap y <Plug>(sshclip-op-y)
     silent! nmap d <Plug>(sshclip-op-d)
     silent! nmap dd <Plug>(sshclip-op-dd)
