@@ -62,6 +62,10 @@ endfunction
 
 
 function! sshclip#misc#init()
+    if has('nvim')
+        set clipboard+=unnamed
+    endif
+
     if !has('nvim') && !exists('s:vim_key_setup')
         let s:vim_key_setup = 1
         call sshclip#keys#setup_interface()
