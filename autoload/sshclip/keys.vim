@@ -85,3 +85,5 @@ function! sshclip#keys#setup_keymap()
     silent! nmap dd <Plug>(sshclip-op-dd)
     silent! nmap D <Plug>(sshclip-op-D)
 endfunction
+
+"  vim: set ft=vim ts=4 sw=4 tw=78 et :

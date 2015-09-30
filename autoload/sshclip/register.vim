@@ -19,7 +19,7 @@ function! sshclip#register#put(register, local_register, data, regtype)
     endif
 
     if sshclip#misc#can_send_str(data)
-        call system(s:commands[a:register]['put'], data)
+        call system(s:commands[a:register]['put'], printf('%s:%s', a:regtype, data))
         if v:shell_error
             call sshclip#misc#err(v:shell_error)
             return
@@ -44,8 +44,23 @@ function! sshclip#register#get(register)
     else
         call sshclip#misc#set_status(a:register, 0)
     endif
-    if has('nvim')
-        return split(data, "\n", 1)
+
+    let regtype = 'V'
+    let i = stridx(data, ':')
+    if i != -1
+        let regtype = data[:(i-1)]
+        if strlen(regtype) < 5 && regtype =~ "\^\\(\<c-v>\\|v\\|V\\)\\d*"
+            let data = data[(i+1):]
+        else
+            let regtype = 'V'
+        endif
     endif
-    return data
+
+    if has('nvim')
+        return [split(data, "\n", 1), regtype]
+    endif
+
+    return [data, regtype]
 endfunction
+
+"  vim: set ft=vim ts=4 sw=4 tw=78 et :

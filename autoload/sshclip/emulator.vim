@@ -58,7 +58,8 @@ function! sshclip#emulator#handle(type, register, key, motion)
                 normal! gv
                 call sshclip#register#put('*', '1', getreg('"'), getregtype('"'))
             endif
-            let @@ = tmp
+
+            call setreg('"', tmp[0], tmp[1])
             execute 'normal! ' key_count . a:key
         else
             let local_register = '0'
@@ -92,3 +93,5 @@ function! sshclip#emulator#handle(type, register, key, motion)
         silent doautocmd User SSHClipYank
     endif
 endfunction
+
+"  vim: set ft=vim ts=4 sw=4 tw=78 et :
