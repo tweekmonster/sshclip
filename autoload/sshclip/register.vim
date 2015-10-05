@@ -59,15 +59,19 @@ function! sshclip#register#get(register)
         call sshclip#misc#set_status(a:register, 0)
     endif
 
-    let regtype = 'V'
+    let regtype = 'v'
     let i = stridx(data, ':')
     if i != -1
         let regtype = data[:(i-1)]
-        if strlen(regtype) < 5 && regtype =~ "\^\\(\<c-v>\\|v\\|V\\)\\d*"
+        if strlen(regtype) < 5 && regtype =~ "\^\\(\<c-v>\\|b\\|v\\|V\\)\\d*"
             let data = data[(i+1):]
         else
-            let regtype = 'V'
+            let regtype = 'v'
         endif
+    elseif get(g:, 'sshclip_guess_regtype', 1)
+        " Guess register type. New line at the end is a block, otherwise it's
+        " inline.
+        let regtype = data[-1:] == "\n" ? 'V' : 'v'
     endif
 
     if has('nvim')
