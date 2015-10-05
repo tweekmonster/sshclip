@@ -21,6 +21,12 @@ function! sshclip#emulator#op_change(motion)
 endfunction
 
 
+function! sshclip#emulator#insert(register)
+    let data = sshclip#register#get(a:register)
+    return data[0]
+endfunction
+
+
 function! sshclip#emulator#handle(type, register, key, motion)
     let key_count = (v:count == v:count1) ? v:count : ''
 
@@ -49,7 +55,10 @@ function! sshclip#emulator#handle(type, register, key, motion)
         " Emulate the command using the unnamed buffer then send or retrieve
         " the desired register from the command line.
         if a:type == 'paste'
+            let old_reg = getreg('"')
+            let old_regtype = getregtype('"')
             let tmp = sshclip#register#get(a:register)
+
             if a:motion == 'v'
                 " A visual paste replaces text.  The replaced text should be
                 " placed back into the unnamed buffer.
@@ -60,6 +69,9 @@ function! sshclip#emulator#handle(type, register, key, motion)
 
             call setreg('"', tmp[0], tmp[1])
             execute 'normal! ' key_count . a:key
+
+            " Restore the unnamed register
+            call setreg('"', old_reg, old_regtype)
         else
             let local_register = '0'
             if a:type == 'delete'

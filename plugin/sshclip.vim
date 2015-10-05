@@ -1,8 +1,8 @@
-if exists('g:clipboard_setup')
+if exists('g:sshclip_init')
     finish
 endif
 
-let g:clipboard_setup = 1
+let g:sshclip_init = 1
 
 command SSHClipKey :call sshclip#misc#set_encryption_key()
 autocmd VimEnter * :call sshclip#misc#init()
