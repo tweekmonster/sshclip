@@ -17,7 +17,6 @@ endfunction
 
 
 function! sshclip#emulator#op_change(motion)
-    echomsg 'Motion: ' . a:motion
     return sshclip#emulator#handle('delete', '*', 'c', a:motion)
 endfunction
 
