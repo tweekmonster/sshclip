@@ -6,9 +6,9 @@ let s:last = {'*': reltime(), '+': reltime()}
 
 
 function! sshclip#register#update_commands()
-    let s:commands['*']['get'] = sshclip#misc#command_str('-o', '-selection', 'primary')
+    let s:commands['*']['get'] = sshclip#misc#command_str('-o', '-selection', 'primary', '--vim')
     let s:commands['*']['put'] = sshclip#misc#command_str('-i', '-selection', 'primary', '--background')
-    let s:commands['+']['get'] = sshclip#misc#command_str('-o', '-selection', 'clipboard')
+    let s:commands['+']['get'] = sshclip#misc#command_str('-o', '-selection', 'clipboard', '--vim')
     let s:commands['+']['put'] = sshclip#misc#command_str('-i', '-selection', 'clipboard', '--background')
 endfunction
 

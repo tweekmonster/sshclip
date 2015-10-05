@@ -7,6 +7,7 @@ passthru=1
 mode=0
 background=0
 use_encryption=1
+vim=0
 sshcmd=${SSHCLIP_SSHCMD:-"ssh sshclip-server"}
 cache="$HOME/.cache/sshclip"
 pidfile="$cache/monitor.pid"
@@ -152,11 +153,34 @@ find_system_clipboard() {
 }
 
 
+strip_vim_header() {
+    # This would be called in a subshell, and the bash subshell strips trailing
+    # whitespace. This assumes the caller is aware of this.
+    local data="$1"
+    if [[ $vim -eq 0 ]]; then
+        i=$(expr index "$data" ":")
+        if [[ $i -le 5 ]]; then
+            case ${data:0:1} in
+                v|V|b|$'\x16')
+                    data=${data:$i}
+                    ;;
+            esac
+        fi
+    fi
+    echo -n "$data"
+}
+
+
 send_clipboard() {
     [[ $passthru -eq 1 ]] && passthru_cmd=$(find_system_clipboard)
     if [[ -n "$passthru_cmd" && "$store" == "clipboard" ]]; then
-        cat "$1" | cksum > "$crcfile"
-        cat "$1" | "$passthru_cmd"
+        o_vim=$vim
+        vim=0
+        data=$(strip_vim_header "$(cat "$1"; echo -n '%')")
+        data=${data:0:(${#data}-1)}
+        vim=$o_vim
+        echo -n "$data" | cksum > "$crcfile"
+        echo -n "$data" | "$passthru_cmd"
     fi
 
     head -c $max_bytes "$1" | $encoder | $sshcmd "put $store"
@@ -193,7 +217,8 @@ do_clipboard() {
             fi
             ;;
         get)
-            $sshcmd "get ${store}" | $decoder
+            data=$(strip_vim_header "$($sshcmd "get ${store}" | $decoder; echo -n "%")")
+            echo -n "${data:0:(${#data}-1)}"
             ;;
         *)
             bail "Uknown action: ${action}"
@@ -347,6 +372,9 @@ parse_args() {
                 ;;
             --no-encryption)
                 use_encryption=0
+                ;;
+            --vim)
+                vim=1
                 ;;
         esac
         shift
