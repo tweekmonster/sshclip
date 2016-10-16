@@ -1,5 +1,7 @@
 # sshclip
 
+## Note: This is being rewritten in Go to be much simpler to use
+
 With [Neovim](https://github.com/neovim/neovim)'s provider infrastructure, the
 unnamed (\*) and plus (+) registers can be securely sent to an SSH account that
 uses a shell specifically for storing and retrieving the clipboard.  The
