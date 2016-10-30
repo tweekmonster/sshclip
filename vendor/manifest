@@ -10,6 +10,14 @@
 			"notests": true
 		},
 		{
+			"importpath": "github.com/andrew-d/go-termutil",
+			"repository": "https://github.com/andrew-d/go-termutil",
+			"vcs": "git",
+			"revision": "009166a695a2f516c749a26b4ac1f183d89aa336",
+			"branch": "master",
+			"notests": true
+		},
+		{
 			"importpath": "github.com/fatih/color",
 			"repository": "https://github.com/fatih/color",
 			"vcs": "git",
@@ -30,6 +38,22 @@
 			"repository": "https://github.com/mattn/go-isatty",
 			"vcs": "git",
 			"revision": "66b8e73f3f5cda9f96b69efd03dd3d7fc4a5cdb8",
+			"branch": "master",
+			"notests": true
+		},
+		{
+			"importpath": "github.com/natefinch/npipe",
+			"repository": "https://github.com/natefinch/npipe",
+			"vcs": "git",
+			"revision": "c1b8fa8bdccecb0b8db834ee0b92fdbcfa606dd6",
+			"branch": "v2",
+			"notests": true
+		},
+		{
+			"importpath": "github.com/nightlyone/lockfile",
+			"repository": "https://github.com/nightlyone/lockfile",
+			"vcs": "git",
+			"revision": "1d49c987357a327b5b03aa84cbddd582c328615d",
 			"branch": "master",
 			"notests": true
 		},
@@ -75,6 +99,14 @@
 			"revision": "c200b10b5d5e122be351b67af224adc6128af5bf",
 			"branch": "master",
 			"path": "/unix",
+			"notests": true
+		},
+		{
+			"importpath": "gopkg.in/natefinch/npipe.v2",
+			"repository": "https://gopkg.in/natefinch/npipe.v2",
+			"vcs": "git",
+			"revision": "c1b8fa8bdccecb0b8db834ee0b92fdbcfa606dd6",
+			"branch": "v2",
 			"notests": true
 		},
 		{

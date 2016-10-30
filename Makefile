@@ -8,14 +8,19 @@ XGO_BUILD_TARGETS := $(foreach t,$(XGO_TARGETS),$(DIST)/$(shell echo "$(t)" \
 XGO_BUILD_TARGETS := $(foreach t,$(XGO_BUILD_TARGETS), \
 	$(shell echo "$(t)" | sed 's!.*windows.*!&.exe!'))
 
-.PHONY: all clean
+.PHONY: all clean kill-monitor
 
 all: $(DIST) $(XGO_BUILD_TARGETS)
 
-clean:
+clean: kill-monitor
 	rm -rf $(DIST)
 
-$(XGO_BUILD_TARGETS): $(SOURCES)
+kill-monitor:
+	@-test -f /tmp/sshclip_monitor.lock \
+		&& kill $$(cat /tmp/sshclip_monitor.lock) 2>/dev/null \
+		&& rm /tmp/sshclip_monitor.lock
+
+$(XGO_BUILD_TARGETS): kill-monitor $(SOURCES)
 	$(eval t := $(wordlist 2,3,$(subst /, ,$@)))
 	$(eval target := $(word 2,$(t))/$(word 1,$(t)))
 	mkdir -p "$(@D)"

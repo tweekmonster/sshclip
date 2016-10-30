@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"os"
 	"strings"
 
 	"github.com/fatih/color"
@@ -11,8 +12,16 @@ import (
 
 // Debug enables/disables debug logging.  This can be set at runtime.
 var Debug = true
+var LogPrefix = ""
 var logger = log.New(color.Output, "", log.Ldate|log.Ltime|log.Lshortfile)
-var logFunc func(string)
+var logFunc = func(message string) {
+	logger.Output(4, message)
+}
+
+func init() {
+	f, _ := os.OpenFile("/tmp/sshclip.log", os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0755)
+	logger.SetOutput(f)
+}
 
 func combine(v ...interface{}) string {
 	out := ""
@@ -43,13 +52,7 @@ func formatMessage(v ...interface{}) string {
 	if i := strings.LastIndex(message, "\x1b[0m"); i != -1 {
 		message = message[:i+4] + strings.Replace(message[i+4:], "\r", "\\r", 0)
 	}
-	return message
-}
-
-func init() {
-	logFunc = func(message string) {
-		logger.Output(4, message)
-	}
+	return LogPrefix + ": " + message
 }
 
 func SetLogFunc(l func(string)) {
