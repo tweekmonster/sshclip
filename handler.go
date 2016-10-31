@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"time"
 )
 
 func readError(r io.Reader) error {
@@ -46,6 +47,7 @@ func GetRegister(rw io.ReadWriter, reg uint8) (RegisterItem, error) {
 		}
 
 		return &MemoryRegisterItem{
+			Updated:       time.Now(),
 			RegisterIndex: reg,
 			Attrs:         attrs,
 			Data:          data,

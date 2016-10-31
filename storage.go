@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"sync"
+	"time"
 )
 
 var ErrTooLarge = errors.New("storage data too large")
@@ -14,9 +15,10 @@ var ErrInvalidIndex = errors.New("invalid index")
 // RegisterItem is an entry in the Register.
 type RegisterItem interface {
 	io.Reader
+	Index() int
 	Attributes() uint8
 	Size() int
-	Index() int
+	Time() time.Time
 }
 
 // Register is a storage for Register data.
@@ -27,6 +29,7 @@ type Register interface {
 
 // MemoryRegisterItem is an in-memory Register entry.
 type MemoryRegisterItem struct {
+	Updated       time.Time
 	RegisterIndex uint8
 	Attrs         uint8
 	Data          []byte
@@ -35,6 +38,10 @@ type MemoryRegisterItem struct {
 // Read register data into b.
 func (m *MemoryRegisterItem) Read(b []byte) (int, error) {
 	return bytes.NewReader(m.Data).Read(b)
+}
+
+func (m *MemoryRegisterItem) Time() time.Time {
+	return m.Updated
 }
 
 // Attributes for the register item.
