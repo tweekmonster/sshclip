@@ -76,12 +76,7 @@ func (c *CachedStorage) Put(reg, attrs uint8, data []byte) error {
 		return ErrInvalidIndex
 	}
 
-	item := &MemoryRegisterItem{
-		RegisterIndex: reg,
-		Attrs:         attrs,
-		Data:          data,
-	}
-
+	item := NewMemoryRegisterItem(reg, attrs, data)
 	c.items[reg] = item
 
 	c.putQueue <- remoteQueueItem{

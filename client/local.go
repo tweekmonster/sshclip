@@ -12,6 +12,7 @@ import (
 
 // Spawn starts a local monitoring process.
 func Spawn(host string, port int) error {
+	sshclip.Dlog("Spawning monitor")
 	exe, err := osext.Executable()
 	if err != nil {
 		return err
@@ -40,7 +41,7 @@ func Spawn(host string, port int) error {
 		},
 	}
 
-	proc, err := os.StartProcess(exe, []string{exe, "monitor", "--listen", host, "--port", strconv.Itoa(port)}, attr)
+	proc, err := os.StartProcess(exe, []string{exe, "monitor", "--host", host, "--port", strconv.Itoa(port)}, attr)
 	if err != nil {
 		return err
 	}
@@ -58,8 +59,6 @@ func LocalListen(sshHost string, sshPort int) error {
 		return err
 	}
 
-	register := sshclip.NewCacheStorage(sshClient)
-
 	conn, err := pipeListen()
 	if err != nil {
 		sshclip.Elog(err)
@@ -74,7 +73,7 @@ func LocalListen(sshHost string, sshPort int) error {
 		}
 
 		go func() {
-			sshclip.HandlePayload(register, localClient)
+			sshclip.HandlePayload(sshClient, localClient)
 			localClient.Close()
 		}()
 	}

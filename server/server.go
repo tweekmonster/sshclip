@@ -2,12 +2,11 @@ package server
 
 import (
 	"bytes"
+	"encoding/binary"
 	"errors"
-	"io"
 	"net"
 	"strconv"
 	"sync"
-	"time"
 
 	"github.com/tweekmonster/sshclip"
 
@@ -22,8 +21,8 @@ type server struct {
 	config      ssh.ServerConfig
 	keysFile    string
 	pendingKeys []ssh.PublicKey
-	clients     []*ssh.ServerConn
-	storage     sshclip.Register
+	clients     []*clientConnection
+	storage     *sshclip.MemoryRegister
 }
 
 func (s *server) authenticate(conn ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Permissions, error) {
@@ -60,57 +59,6 @@ func (s *server) authenticate(conn ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Pe
 	return perm, nil
 }
 
-func (s *server) handleConnection(client net.Conn) error {
-	sshclip.Log("Connection from:", client.RemoteAddr())
-	conn, channels, requests, err := ssh.NewServerConn(client, &s.config)
-	if err != nil {
-		return err
-	}
-
-	s.Lock()
-	s.clients = append(s.clients, conn)
-	s.Unlock()
-
-	var pubkey ssh.PublicKey
-
-	if keyStr, ok := conn.Permissions.Extensions["pubkey"]; ok {
-		pubkey, _, _, _, err = ssh.ParseAuthorizedKey([]byte(keyStr))
-		if err != nil {
-			return err
-		}
-	}
-
-	go ssh.DiscardRequests(requests)
-
-	var cli *serverClient
-
-	for ch := range channels {
-		// 'sshclip' is the standard get/put channel.  'monitor' will be a
-		// broadcast channel.
-		if chtype := ch.ChannelType(); chtype != "sshclip" {
-			ch.Reject(ssh.UnknownChannelType, "Unknown channel type: "+chtype)
-			continue
-		}
-
-		cli, err = newClient(s.storage, conn, pubkey, ch)
-		if err != nil {
-			return err
-		}
-
-		sshclip.Log("New sshclip channel from", conn.RemoteAddr())
-
-		if cli != nil {
-			go func() {
-				for ch := range channels {
-					ch.Reject(ssh.Prohibited, "No")
-				}
-			}()
-		}
-	}
-
-	return nil
-}
-
 func (s *server) run() error {
 	hostKeySigner, err := sshclip.GetHostKey()
 	if err != nil {
@@ -131,55 +79,96 @@ func (s *server) run() error {
 			continue
 		}
 
-		go func() {
-			if err := s.handleConnection(conn); err != nil {
-				if err != io.EOF {
-					sshclip.Elog(err)
-				}
-			}
-
-			sshclip.Dlog("Session ended for", conn.RemoteAddr())
-			s.cleanupConnections()
-		}()
+		cli, err := newClientConnection(conn, s)
+		if err != nil {
+			sshclip.Elog(err)
+		} else {
+			s.addClient(cli)
+		}
 	}
 }
 
-func (s *server) cleanupConnections() {
+func (s *server) addClient(c *clientConnection) {
 	s.Lock()
+	defer s.Unlock()
+
+	s.clients = append(s.clients, c)
+}
+
+func (s *server) removeClient(c *clientConnection) {
+	s.Lock()
+	defer s.Unlock()
+
 	clients := s.clients
 	s.clients = s.clients[:0]
 
-	for _, conn := range clients {
-		_, _, err := conn.SendRequest("keepalive", true, nil)
-		if err != nil {
-			// TODO: Find out if Close() does anything useful if the client
-			// connection is actually closed.
-			conn.Close()
-			sshclip.Dlog("Dead Client", conn.RemoteAddr(), err)
-		} else {
-			s.clients = append(s.clients, conn)
+	for _, cli := range clients {
+		if cli != c {
+			s.clients = append(s.clients, cli)
 		}
 	}
-	s.Unlock()
 }
 
+// Send a request to all clients on a specific channel.
+func (s *server) broadcast(channel, name string, data []byte) {
+	sshclip.Dlog("Broadcast")
+	s.Lock()
+	defer s.Unlock()
+	sshclip.Dlog("Broadcast start")
+
+	clients := s.clients
+	s.clients = s.clients[:0]
+
+	for _, cli := range clients {
+		sshclip.Dlog("Broadcasting to %s", cli.conn.RemoteAddr())
+		cli.Lock()
+		if ch, ok := cli.channels[channel]; ok {
+			if _, err := ch.SendRequest(name, false, data); err == nil {
+				s.clients = append(s.clients, cli)
+			}
+		}
+		cli.Unlock()
+	}
+}
+
+// Services the MemoryRegister's notification channel and notifies of register
+// changes.
+func (s *server) notificationRoutine() {
+	msgBytes := make([]byte, 2)
+
+	for msg := range s.storage.Notify {
+		binary.BigEndian.PutUint16(msgBytes, msg)
+		sshclip.Dlog("Notification: %#v", msgBytes)
+		op := msgBytes[0]
+		reg := msgBytes[1]
+
+		switch op {
+		case sshclip.OpPut:
+			item, err := s.storage.GetItem(reg)
+			if err == nil {
+				var b bytes.Buffer
+				binary.Write(&b, binary.BigEndian, item.Hash())
+				s.broadcast("sshclip", "sync", b.Bytes())
+			}
+		}
+	}
+}
+
+// Listen starts the SSH server for new connections.
 func Listen(host string, port int) error {
 	conn, err := net.Listen("tcp", net.JoinHostPort(host, strconv.Itoa(port)))
 	if err != nil {
 		return err
 	}
 
+	storage := sshclip.NewMemoryRegister()
+
 	s := &server{
 		conn:    conn,
-		storage: sshclip.NewMemoryRegister(),
+		storage: storage,
 	}
 
-	go func() {
-		t := time.Tick(time.Minute * 2)
-		for _ = range t {
-			s.cleanupConnections()
-		}
-	}()
+	go s.notificationRoutine()
 
 	return s.run()
 }

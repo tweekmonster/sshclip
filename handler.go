@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"time"
 )
 
 func readError(r io.Reader) error {
@@ -46,12 +45,7 @@ func GetRegister(rw io.ReadWriter, reg uint8) (RegisterItem, error) {
 			return nil, err
 		}
 
-		return &MemoryRegisterItem{
-			Updated:       time.Now(),
-			RegisterIndex: reg,
-			Attrs:         attrs,
-			Data:          data,
-		}, nil
+		return NewMemoryRegisterItem(reg, attrs, data), nil
 	case OpErr:
 		return nil, readError(rw)
 	}
@@ -84,6 +78,79 @@ func PutRegister(rw io.ReadWriter, reg uint8, attrs uint8, data []byte) error {
 	}
 
 	return fmt.Errorf("Unexpected byte: %02x", op)
+}
+
+// ListRegisters lists the registers.
+func ListRegisters(rw io.ReadWriter) ([]RegisterItemHash, error) {
+	if _, err := rw.Write(OpHeader(OpList)); err != nil {
+		return nil, err
+	}
+
+	op, err := ReadOp(rw)
+	if err != nil {
+		return nil, err
+	}
+
+	switch op {
+	case OpSuccess:
+		var length uint8
+		if err := binary.Read(rw, binary.BigEndian, &length); err != nil {
+			return nil, err
+		}
+
+		regs := make([]RegisterItemHash, length)
+		if err := binary.Read(rw, binary.BigEndian, &regs); err != nil {
+			return nil, err
+		}
+
+		return regs, nil
+
+	case OpErr:
+		return nil, readError(rw)
+	}
+
+	return nil, fmt.Errorf("Unexpected byte: %02x", op)
+}
+
+// SyncRegister makes an OpSync request and synchronizes the registers.
+func SyncRegister(rw io.ReadWriter, reg Register) error {
+	regs, err := ListRegisters(rw)
+	if err != nil {
+		return err
+	}
+
+	for _, r := range regs {
+		var sync bool
+		item, err := reg.Get(r.Register)
+		switch err {
+		case ErrNotExist:
+			sync = true
+		case nil:
+			sync = !item.EqualsHash(r)
+		default:
+			return err
+		}
+
+		if sync {
+			item, err := GetRegister(rw, r.Register)
+			if err != nil {
+				return err
+			}
+
+			data := make([]byte, item.Size())
+			if _, err := item.Read(data); err != nil {
+				return err
+			}
+
+			if err := reg.Put(uint8(item.Index()), item.Attributes(), data); err != nil {
+				return err
+			}
+
+			Dlog("Synced register '%c'", item.Index())
+		}
+	}
+
+	return nil
 }
 
 // HandlePayload is the main handler for reading channel/stream data.  Any
@@ -146,6 +213,21 @@ func HandlePayload(storage Register, channel io.ReadWriteCloser) error {
 			}
 
 			channel.Write(OpHeader(OpSuccess))
+			return nil
+
+		case OpList:
+			items, err := storage.List()
+			if err != nil {
+				return err
+			}
+			header := OpHeader(OpSuccess)
+			header = append(header, byte(len(items)))
+			if _, err := channel.Write(header); err != nil {
+				return err
+			}
+			if err := binary.Write(channel, binary.BigEndian, items); err != nil {
+				return err
+			}
 			return nil
 
 		case OpErr:

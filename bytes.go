@@ -16,6 +16,7 @@ const (
 	OpErr     uint8 = iota // An error is being reported
 	OpSuccess              // Success.
 	OpList                 // Request to list registers.
+	OpSync                 // Request to sync registers.
 	OpGet                  // Request to get register data.
 	OpPut                  // Request to put data into a register.
 )

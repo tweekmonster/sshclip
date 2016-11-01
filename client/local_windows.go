@@ -8,7 +8,7 @@ import (
 )
 
 func pipeListen() (net.Listener, error) {
-	return net.Listen(`\\.\pipe\sshclip`)
+	return npipe.Listen(`\\.\pipe\sshclip`)
 }
 
 func pipeDial(timeout time.Duration) (net.Conn, error) {

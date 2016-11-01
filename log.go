@@ -13,14 +13,15 @@ import (
 // Debug enables/disables debug logging.  This can be set at runtime.
 var Debug = true
 var LogPrefix = ""
-var logger = log.New(color.Output, "", log.Ldate|log.Ltime|log.Lshortfile)
+var logger *log.Logger
 var logFunc = func(message string) {
 	logger.Output(4, message)
 }
 
 func init() {
-	f, _ := os.OpenFile("/tmp/sshclip.log", os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0755)
-	logger.SetOutput(f)
+	f, _ := os.OpenFile("/tmp/sshclip.log", os.O_SYNC|os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0755)
+	logger = log.New(f, "", log.Ldate|log.Ltime|log.Lshortfile)
+	// logger.SetOutput(f)
 }
 
 func combine(v ...interface{}) string {

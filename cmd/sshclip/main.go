@@ -55,7 +55,7 @@ func runServer(c *cli.Context) error {
 		return err
 	}
 	defer lock.Unlock()
-	return server.Listen(c.String("listen"), c.Int("port"))
+	return server.Listen(c.String("host"), c.Int("port"))
 }
 
 func runMonitor(c *cli.Context) error {
@@ -65,7 +65,7 @@ func runMonitor(c *cli.Context) error {
 		return err
 	}
 	defer lock.Unlock()
-	if err := client.LocalListen(c.String("listen"), c.Int("port")); err != nil {
+	if err := client.LocalListen(c.String("host"), c.Int("port")); err != nil {
 		return err
 	}
 
@@ -76,7 +76,7 @@ func runClient(c *cli.Context) (err error) {
 	sshclip.LogPrefix = "client"
 	conn, err := client.LocalConnect(0)
 	if err != nil {
-		if err := client.Spawn(c.String("listen"), c.Int("port")); err != nil {
+		if err := client.Spawn(c.String("host"), c.Int("port")); err != nil {
 			return err
 		}
 
@@ -126,7 +126,7 @@ func runClient(c *cli.Context) (err error) {
 func main() {
 	stdFlags := []cli.Flag{
 		&cli.StringFlag{
-			Name:  "listen",
+			Name:  "host",
 			Value: "127.0.0.1",
 			Usage: "Listen address",
 		},

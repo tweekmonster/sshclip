@@ -2,50 +2,80 @@ package server
 
 import (
 	"io"
+	"net"
+	"sync"
 
 	"github.com/tweekmonster/sshclip"
+
 	"golang.org/x/crypto/ssh"
 )
 
-type serverClient struct {
-	conn    *ssh.ServerConn
-	key     ssh.PublicKey
-	channel ssh.Channel
-	storage sshclip.Register
+type clientConnection struct {
+	sync.Mutex
+	server   *server
+	conn     *ssh.ServerConn
+	channels map[string]ssh.Channel
 }
 
-func newClient(storage sshclip.Register, conn *ssh.ServerConn, key ssh.PublicKey, ch ssh.NewChannel) (*serverClient, error) {
-	channel, requests, err := ch.Accept()
+func newClientConnection(c net.Conn, s *server) (*clientConnection, error) {
+	conn, channels, requests, err := ssh.NewServerConn(c, &s.config)
 	if err != nil {
 		return nil, err
 	}
 
-	s := &serverClient{
-		conn:    conn,
-		key:     key,
-		channel: channel,
-		storage: storage,
-	}
-
-	go s.sessionLoop()
 	go ssh.DiscardRequests(requests)
 
-	return s, nil
+	cli := &clientConnection{
+		server:   s,
+		conn:     conn,
+		channels: make(map[string]ssh.Channel),
+	}
+
+	go cli.handleChannels(channels)
+
+	return cli, nil
 }
 
-func (s *serverClient) String() string {
-	return s.conn.RemoteAddr().String()
+func (c *clientConnection) handleChannels(channels <-chan ssh.NewChannel) {
+	for ch := range channels {
+		// 'sshclip' is the standard get/put/notification channel.
+		chname := ch.ChannelType()
+		switch chname {
+		case "sshclip":
+			newChan, newRequests, err := ch.Accept()
+			if err != nil {
+				break
+			}
+
+			go ssh.DiscardRequests(newRequests)
+			go c.serviceChannel(chname, newChan)
+
+		default:
+			ch.Reject(ssh.UnknownChannelType, "Unknown channel type: "+chname)
+		}
+	}
+
+	c.server.removeClient(c)
 }
 
-func (s *serverClient) sessionLoop() {
+func (c *clientConnection) serviceChannel(name string, ch ssh.Channel) {
+	sshclip.Log("New %s channel from %s", name, c.conn.RemoteAddr())
+
+	c.Lock()
+	c.channels[name] = ch
+	c.Unlock()
+
 	for {
-		err := sshclip.HandlePayload(s.storage, s.channel)
+		err := sshclip.HandlePayload(c.server.storage, ch)
 		if err != nil {
 			if err == io.EOF {
 				break
 			}
-
 			sshclip.Elog(err)
 		}
 	}
+
+	c.Lock()
+	delete(c.channels, name)
+	c.Unlock()
 }
