@@ -20,24 +20,22 @@ func lockPath(name string) string {
 	return filepath.Join(os.TempDir(), "sshclip_"+name+".lock")
 }
 
-func lockFile(name string, lockRetry int) (lockfile.Lockfile, error) {
+func lockFile(name string, timeout time.Duration) (lockfile.Lockfile, error) {
 	lockfilePath := lockPath(name)
 	lock, err := lockfile.New(lockfilePath)
 	if err != nil {
 		return "", err
 	}
 
-	for tryCount := 0; tryCount < lockRetry; tryCount++ {
+	stop := time.Now().Add(timeout)
+	t := time.NewTicker(time.Millisecond * 100)
+	for n := range t.C {
 		if err := lock.TryLock(); err != nil {
 			if _, ok := err.(lockfile.TemporaryError); ok {
-				if tryCount >= lockRetry-1 {
+				if n.After(stop) {
 					return "", err
 				}
-				time.Sleep(time.Second)
-				sshclip.Dlog("Retrying " + name + " lock.")
 				continue
-			} else {
-				return "", err
 			}
 		}
 		break
@@ -50,7 +48,7 @@ func lockFile(name string, lockRetry int) (lockfile.Lockfile, error) {
 
 func runServer(c *cli.Context) error {
 	sshclip.LogPrefix = "server"
-	lock, err := lockFile("server", 10)
+	lock, err := lockFile("server", time.Second*5)
 	if err != nil {
 		return err
 	}
@@ -60,7 +58,7 @@ func runServer(c *cli.Context) error {
 
 func runMonitor(c *cli.Context) error {
 	sshclip.LogPrefix = "monitor"
-	lock, err := lockFile("monitor", 10)
+	lock, err := lockFile("monitor", time.Second*5)
 	if err != nil {
 		return err
 	}
@@ -74,7 +72,29 @@ func runMonitor(c *cli.Context) error {
 
 func runClient(c *cli.Context) (err error) {
 	sshclip.LogPrefix = "client"
+	restart := c.Bool("restart")
 	conn, err := client.LocalConnect(0)
+
+	if err == nil && restart {
+		restartErr := errors.New("Failed to restart monitor")
+		if _, err := conn.Write(sshclip.OpHeader(sshclip.OpStop)); err == nil {
+			if op, err := sshclip.ReadOp(conn); err == nil && op == sshclip.OpSuccess {
+				// Acquire the monitor's lock to ensure it's no longer running.
+				lock, err := lockFile("monitor", time.Second)
+				if err == nil {
+					restartErr = nil
+					lock.Unlock()
+				}
+			}
+		}
+
+		if restartErr != nil {
+			return restartErr
+		}
+
+		err = io.EOF
+	}
+
 	if err != nil {
 		if err := client.Spawn(c.String("host"), c.Int("port")); err != nil {
 			return err
@@ -145,6 +165,10 @@ func main() {
 		&cli.IntFlag{
 			Name:  "flags",
 			Usage: "Flags",
+		},
+		&cli.BoolFlag{
+			Name:  "restart",
+			Usage: "Restart monitor",
 		},
 	}...)
 

@@ -253,6 +253,10 @@ func HandlePayload(storage Register, channel io.ReadWriteCloser) error {
 
 			Elog("Error from remote:", string(errBytes))
 			return nil
+
+		case OpStop:
+			channel.Write(OpHeader(OpSuccess))
+			ListenLoopStop()
 		}
 
 		return fmt.Errorf("Unknown op: %02x", op)

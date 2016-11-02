@@ -19,6 +19,7 @@ const (
 	OpSync                 // Request to sync registers.
 	OpGet                  // Request to get register data.
 	OpPut                  // Request to put data into a register.
+	OpStop                 // Request to stop the server.
 )
 
 const (

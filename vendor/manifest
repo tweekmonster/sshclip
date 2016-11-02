@@ -26,6 +26,22 @@
 			"notests": true
 		},
 		{
+			"importpath": "github.com/kardianos/osext",
+			"repository": "https://github.com/kardianos/osext",
+			"vcs": "git",
+			"revision": "c2c54e542fb797ad986b31721e1baedf214ca413",
+			"branch": "master",
+			"notests": true
+		},
+		{
+			"importpath": "github.com/kardianos/service",
+			"repository": "https://github.com/kardianos/service",
+			"vcs": "git",
+			"revision": "7a88211485df5d3da6ec68f4f8a5ff9bec297327",
+			"branch": "master",
+			"notests": true
+		},
+		{
 			"importpath": "github.com/mattn/go-colorable",
 			"repository": "https://github.com/mattn/go-colorable",
 			"vcs": "git",
@@ -99,6 +115,15 @@
 			"revision": "c200b10b5d5e122be351b67af224adc6128af5bf",
 			"branch": "master",
 			"path": "/unix",
+			"notests": true
+		},
+		{
+			"importpath": "golang.org/x/sys/windows",
+			"repository": "https://go.googlesource.com/sys",
+			"vcs": "git",
+			"revision": "c200b10b5d5e122be351b67af224adc6128af5bf",
+			"branch": "master",
+			"path": "windows",
 			"notests": true
 		},
 		{

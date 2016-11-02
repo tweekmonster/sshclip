@@ -65,18 +65,10 @@ func LocalListen(sshHost string, sshPort int) error {
 		return err
 	}
 
-	for {
-		localClient, err := conn.Accept()
-		if err != nil {
-			sshclip.Elog(err)
-			continue
-		}
-
-		go func() {
-			sshclip.HandlePayload(sshClient, localClient)
-			localClient.Close()
-		}()
-	}
+	return sshclip.ListenLoop(conn, func(c net.Conn) {
+		sshclip.HandlePayload(sshClient, c)
+		c.Close()
+	})
 }
 
 // LocalConnect connects to the local monitoring server.

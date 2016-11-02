@@ -9,9 +9,7 @@ import (
 )
 
 func pipeListen() (net.Listener, error) {
-	if err := os.Remove("/tmp/sshclip.sock"); err != nil {
-		return nil, err
-	}
+	os.Remove("/tmp/sshclip.sock")
 	return net.Listen("unix", "/tmp/sshclip.sock")
 }
 

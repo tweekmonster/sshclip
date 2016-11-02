@@ -72,20 +72,14 @@ func (s *server) run() error {
 	}
 	s.config.AddHostKey(hostKeySigner)
 
-	for {
-		conn, err := s.conn.Accept()
-		if err != nil {
-			sshclip.Elog(err)
-			continue
-		}
-
-		cli, err := newClientConnection(conn, s)
+	return sshclip.ListenLoop(s.conn, func(c net.Conn) {
+		cli, err := newClientConnection(c, s)
 		if err != nil {
 			sshclip.Elog(err)
 		} else {
 			s.addClient(cli)
 		}
-	}
+	})
 }
 
 func (s *server) addClient(c *clientConnection) {
