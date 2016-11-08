@@ -17,37 +17,30 @@ var errPubKeyPending = errors.New("PublicKey is pending approval")
 
 type server struct {
 	sync.RWMutex
-	conn        net.Listener
-	config      ssh.ServerConfig
-	keysFile    string
-	pendingKeys []ssh.PublicKey
-	clients     []*clientConnection
-	storage     *sshclip.MemoryRegister
+	conn     net.Listener
+	config   ssh.ServerConfig
+	keysFile string
+	clients  []*clientConnection
+	storage  *sshclip.MemoryRegister
 }
 
 func (s *server) authenticate(conn ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Permissions, error) {
 	// Unknown keys aren't allowed to do anything until an existing client
 	// approves its membership.
-	keyBytes := ssh.MarshalAuthorizedKey(key)
+
+	keyRecord := sshclip.NewPublicKeyRecord(key, conn.RemoteAddr())
 
 	// Pre-fail if the key is pending approval from an existing client.
-	s.RLock()
-	for _, k := range s.pendingKeys {
-		if bytes.Equal(keyBytes, ssh.MarshalAuthorizedKey(k)) {
-			sshclip.Dlog("Key is pending:", sshclip.FingerPrint(key))
-			s.RUnlock()
-			return nil, errPubKeyPending
-		}
-	}
-	s.RUnlock()
-
-	if !sshclip.IsAuthorizedKey(key) {
-		s.Lock()
-		s.pendingKeys = append(s.pendingKeys, key)
-		s.Unlock()
+	if sshclip.IsPendingKey(keyRecord) {
 		return nil, errPubKeyPending
 	}
 
+	if !sshclip.IsAuthorizedKey(keyRecord) {
+		sshclip.AddPendingKey(keyRecord)
+		return nil, errPubKeyPending
+	}
+
+	keyBytes := ssh.MarshalAuthorizedKey(key)
 	perm := &ssh.Permissions{
 		Extensions: map[string]string{
 			"pubkey": string(keyBytes),

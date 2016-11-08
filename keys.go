@@ -8,16 +8,49 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
+	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"net"
 	"os"
+	"time"
 
 	"golang.org/x/crypto/ssh"
 )
 
 var KeySize = 2049
 var errKeyExists = errors.New("key exists")
+
+type KeyRecord struct {
+	DateAdded time.Time `json:"added"`
+	IP        string    `json:"ip"`
+}
+
+type PublicKeyRecord struct {
+	ssh.PublicKey
+	KeyRecord
+}
+
+func NewPublicKeyRecord(key ssh.PublicKey, addr net.Addr) PublicKeyRecord {
+	ip, _, err := net.SplitHostPort(addr.String())
+	if err != nil {
+		ip = addr.String()
+	}
+
+	return PublicKeyRecord{
+		PublicKey: key,
+		KeyRecord: KeyRecord{
+			DateAdded: time.Now(),
+			IP:        ip,
+		},
+	}
+}
+
+func (p PublicKeyRecord) MarshalComment() []byte {
+	data, _ := json.Marshal(p.KeyRecord)
+	return data
+}
 
 // Generates an SSH public and private key then writes them to a file.
 func generateKey(path string) error {
@@ -75,28 +108,123 @@ func GetClientKey() (ssh.Signer, error) {
 	return loadKey("keys/client")
 }
 
-func isAuthorizedKey(key ssh.PublicKey) bool {
-	file, err := OpenDataFile("keys/authorized", os.O_RDONLY, 0)
+func readKeys(filename string) ([]ssh.PublicKey, error) {
+	var keys []ssh.PublicKey
+
+	file, err := OpenDataFile(filename, os.O_RDONLY, 0)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return keys, nil
+		}
+		return nil, err
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		keyBytes := scanner.Bytes()
+		if keyBytes[0] == '#' {
+			continue
+		}
+
+		fKey, comment, _, _, err := ssh.ParseAuthorizedKey(keyBytes)
+		if err != nil {
+			Elog(err, string(keyBytes))
+			continue
+		}
+
+		if comment != "" {
+			keyRec := PublicKeyRecord{
+				PublicKey: fKey,
+			}
+
+			if err := json.Unmarshal([]byte(comment), &keyRec.KeyRecord); err == nil {
+				Dlog("Loaded record: %#v", keyRec)
+				keys = append(keys, keyRec)
+				continue
+			} else {
+				Elog(err)
+			}
+		}
+
+		keys = append(keys, fKey)
+	}
+
+	return keys, nil
+}
+
+func writeKeys(filename string, keys []ssh.PublicKey) error {
+	file, err := OpenDataFile(filename, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+	if err != nil {
+		return err
+	}
+
+	defer file.Close()
+
+	file.Write([]byte("## DO NOT EDIT!\n"))
+
+	for _, key := range keys {
+		keyBytes := ssh.MarshalAuthorizedKey(key)
+
+		switch k := key.(type) {
+		case PublicKeyRecord:
+			keyBytes = append(bytes.TrimSpace(keyBytes), ' ')
+			keyBytes = append(keyBytes, k.MarshalComment()...)
+		}
+
+		if _, err := file.Write(keyBytes); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func keyExists(filename string, key ssh.PublicKey) bool {
+	keys, err := readKeys(filename)
 	if err != nil {
 		return false
 	}
 
 	keyBytes := key.Marshal()
-	scanner := bufio.NewScanner(file)
-
-	for scanner.Scan() {
-		fKey, _, _, _, err := ssh.ParseAuthorizedKey(scanner.Bytes())
-		if err != nil {
-			Elog(err)
-			continue
-		}
-
-		if bytes.Equal(keyBytes, fKey.Marshal()) {
+	for _, key := range keys {
+		if bytes.Equal(keyBytes, key.Marshal()) {
 			return true
 		}
 	}
 
 	return false
+}
+
+func addKey(filename string, key ssh.PublicKey) error {
+	keys, err := readKeys(filename)
+	if err != nil {
+		return err
+	}
+
+	keys = append(keys, key)
+	return writeKeys(filename, keys)
+}
+
+func removeKey(filename string, key ssh.PublicKey) error {
+	keys, err := readKeys(filename)
+	if err != nil {
+		return err
+	}
+
+	var outKeys []ssh.PublicKey
+	keyBytes := key.Marshal()
+	for _, key := range keys {
+		if !bytes.Equal(keyBytes, key.Marshal()) {
+			outKeys = append(outKeys, key)
+		}
+	}
+
+	return writeKeys(filename, outKeys)
+}
+
+func isAuthorizedKey(key ssh.PublicKey) bool {
+	return keyExists("keys/authorized", key)
 }
 
 // IsAuthorizedKey checks if a key is authorized.  If the authorized keys file
@@ -118,14 +246,7 @@ func AddAuthorizedKey(key ssh.PublicKey) error {
 		return errKeyExists
 	}
 
-	file, err := OpenDataFile("keys/authorized", os.O_WRONLY|os.O_CREATE, 0600)
-	if err != nil {
-		return err
-	}
-
-	authorizedKey := ssh.MarshalAuthorizedKey(key)
-	_, err = file.Write(authorizedKey)
-	return err
+	return addKey("keys/authorized", key)
 }
 
 // FingerPrint returns the ssh.PublicKey SHA256 finger print.
@@ -134,17 +255,16 @@ func FingerPrint(key ssh.PublicKey) string {
 	h := sha256.New()
 	h.Write(keyBytes)
 	return fmt.Sprintf("SHA256:%s", base64.StdEncoding.EncodeToString(h.Sum(nil)))
-	// return h.Sum(nil)
 }
 
-// // FingerPrintString returns the printable finger print.
-// func FingerPrintString(s ssh.Signer) string {
-// 	return base64.StdEncoding.EncodeToString(FingerPrint(s))
-// 	// fp := ""
-// 	//
-// 	// for _, c := range FingerPrint(s) {
-// 	// 	fp += fmt.Sprintf("%02x:", c)
-// 	// }
-// 	//
-// 	// return fp[:len(fp)-1]
-// }
+func IsPendingKey(key ssh.PublicKey) bool {
+	return keyExists("keys/pending", key)
+}
+
+func AddPendingKey(key ssh.PublicKey) error {
+	return addKey("keys/pending", key)
+}
+
+func RemovePendingKey(key ssh.PublicKey) error {
+	return removeKey("keys/pending", key)
+}
