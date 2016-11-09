@@ -1,13 +1,19 @@
 package sshclip
 
 import (
+	"bytes"
 	"encoding/binary"
+	"encoding/gob"
 	"errors"
 	"fmt"
 	"io"
+
+	"golang.org/x/crypto/ssh"
 )
 
-func readError(r io.Reader) error {
+var ErrClientKey = errors.New("can't manage own key")
+
+func ReadError(r io.Reader) error {
 	var sb [3]byte
 	if _, err := r.Read(sb[:]); err != nil {
 		return fmt.Errorf("couldn't read error: %s", err)
@@ -47,7 +53,7 @@ func GetRegister(rw io.ReadWriter, reg uint8) (RegisterItem, error) {
 
 		return NewMemoryRegisterItem(reg, attrs, data), nil
 	case OpErr:
-		return nil, readError(rw)
+		return nil, ReadError(rw)
 	}
 
 	return nil, fmt.Errorf("Unexpected byte: %02x", op)
@@ -74,7 +80,7 @@ func PutRegister(rw io.ReadWriter, reg uint8, attrs uint8, data []byte) error {
 	case OpSuccess:
 		return nil
 	case OpErr:
-		return readError(rw)
+		return ReadError(rw)
 	}
 
 	return fmt.Errorf("Unexpected byte: %02x", op)
@@ -106,7 +112,7 @@ func ListRegisters(rw io.ReadWriter) ([]RegisterItemHash, error) {
 		return regs, nil
 
 	case OpErr:
-		return nil, readError(rw)
+		return nil, ReadError(rw)
 	}
 
 	return nil, fmt.Errorf("Unexpected byte: %02x", op)
@@ -233,30 +239,97 @@ func HandlePayload(storage Register, channel io.ReadWriteCloser) error {
 		case OpErr:
 			// This should not return any errors because it's the part that reports
 			// errors!
-			var sb [3]byte
-			if _, err := channel.Read(sb[:]); err != nil {
-				Elog("error reading error:", err)
-				return nil
-			}
-
-			size := SizeFromBytes(sb)
-			if size > MaxPayloadSize {
-				Elog("error message is too large")
-				return nil
-			}
-
-			errBytes := make([]byte, size)
-			if _, err := channel.Read(errBytes); err != nil {
-				Elog("couldn't send error message:", err)
-				return nil
-			}
-
-			Elog("Error from remote:", string(errBytes))
+			err := ReadError(channel)
+			Elog("Error from remote:", err)
 			return nil
 
 		case OpStop:
 			channel.Write(OpHeader(OpSuccess))
 			ListenLoopStop()
+		}
+
+		return fmt.Errorf("Unknown op: %02x", op)
+	}()
+
+	if err != nil && err != io.EOF {
+		header := OpHeader(OpErr)
+		errStr := err.Error()
+		header = append(header, SizeToBytes(len(errStr))...)
+		header = append(header, []byte(errStr)...)
+		channel.Write(header)
+	}
+
+	return err
+}
+
+func HandleKeyPayload(clientKey ssh.PublicKey, channel io.ReadWriter) error {
+	err := func() error {
+		op, err := ReadOp(channel)
+		if err != nil {
+			return err
+		}
+
+		switch op {
+		case OpList:
+			var reviewKeys []KeyReviewItem
+
+			for _, k := range allKeys() {
+				reviewKeys = append(reviewKeys, KeyReviewItem{
+					FingerPrint: FingerPrintBytes(k.PublicKey),
+					KeyRecord:   k.KeyRecord,
+				})
+			}
+
+			channel.Write(OpHeader(OpSuccess))
+			enc := gob.NewEncoder(channel)
+			enc.Encode(reviewKeys)
+			return nil
+
+		case OpAccept:
+			fingerprint := make([]byte, 32)
+			channel.Read(fingerprint)
+
+			if bytes.Equal(FingerPrintBytes(clientKey), fingerprint) {
+				return ErrClientKey
+			}
+
+			key, err := FindFingerPrint(fingerprint)
+			if err != nil {
+				return err
+			}
+
+			key.State = "authorized"
+			AddKey("authorized", key)
+
+			if KeyExists("rejected", key) {
+				RemoveKey("rejected", key)
+			}
+
+			channel.Write(OpHeader(OpSuccess))
+			return nil
+
+		case OpReject:
+			fingerprint := make([]byte, 32)
+			channel.Read(fingerprint)
+
+			if bytes.Equal(FingerPrintBytes(clientKey), fingerprint) {
+				return ErrClientKey
+			}
+
+			key, err := FindFingerPrint(fingerprint)
+			if err != nil {
+				return err
+			}
+
+			key.State = "rejected"
+			AddKey("rejected", key)
+
+			if KeyExists("authorized", key) {
+				RemoveKey("authorized", key)
+			}
+
+			channel.Write(OpHeader(OpSuccess))
+			return nil
 		}
 
 		return fmt.Errorf("Unknown op: %02x", op)

@@ -72,6 +72,11 @@ func runMonitor(c *cli.Context) error {
 
 func runClient(c *cli.Context) (err error) {
 	sshclip.LogPrefix = "client"
+
+	if c.Bool("keys") {
+		return manageKeys(c.String("host"), c.Int("port"))
+	}
+
 	restart := c.Bool("restart")
 	conn, err := client.LocalConnect(0)
 
@@ -169,6 +174,10 @@ func main() {
 		&cli.BoolFlag{
 			Name:  "restart",
 			Usage: "Restart monitor",
+		},
+		&cli.BoolFlag{
+			Name:  "keys",
+			Usage: "Key management",
 		},
 	}...)
 

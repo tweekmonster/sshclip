@@ -27,7 +27,7 @@ var errKeyNoRecord = errors.New("key has no record")
 type KeyRecord struct {
 	Added time.Time `json:"added"`
 	IP    string    `json:"ip"`
-	State int       `json:"state"`
+	State string    `json:"state"`
 }
 
 type PublicKeyRecord struct {
@@ -45,7 +45,7 @@ func NewPublicKeyRecord(key ssh.PublicKey, addr net.Addr) PublicKeyRecord {
 		PublicKey: key,
 		KeyRecord: KeyRecord{
 			Added: time.Now(),
-			State: -1,
+			State: "pending",
 		},
 	}
 
@@ -160,7 +160,6 @@ func readKeys(filename string) ([]ssh.PublicKey, error) {
 			}
 
 			if err := json.Unmarshal([]byte(comment), &keyRec.KeyRecord); err == nil {
-				Dlog("Loaded record: %#v", keyRec)
 				keys = append(keys, keyRec)
 				continue
 			} else {
@@ -174,7 +173,7 @@ func readKeys(filename string) ([]ssh.PublicKey, error) {
 	return keys, nil
 }
 
-func writeKeys(filename string, keys []ssh.PublicKey) error {
+func writeKeys(filename string, keys []ssh.PublicKey, eval ssh.PublicKey, add bool) error {
 	file, err := OpenDataFile(filepath.Join("keys", filename), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
 	if err != nil {
 		return err
@@ -184,6 +183,23 @@ func writeKeys(filename string, keys []ssh.PublicKey) error {
 
 	file.Write([]byte("## DO NOT EDIT!\n"))
 
+	if eval != nil {
+		evalBytes := eval.Marshal()
+		ikeys := keys
+		keys = keys[0:0]
+
+		for _, key := range ikeys {
+			if bytes.Equal(evalBytes, key.Marshal()) {
+				continue
+			}
+			keys = append(keys, key)
+		}
+
+		if add {
+			keys = append(keys, eval)
+		}
+	}
+
 	for _, key := range keys {
 		keyBytes := ssh.MarshalAuthorizedKey(key)
 
@@ -191,6 +207,7 @@ func writeKeys(filename string, keys []ssh.PublicKey) error {
 		case PublicKeyRecord:
 			keyBytes = append(bytes.TrimSpace(keyBytes), ' ')
 			keyBytes = append(keyBytes, k.MarshalComment()...)
+			keyBytes = append(keyBytes, '\n')
 		}
 
 		if _, err := file.Write(keyBytes); err != nil {
@@ -223,8 +240,17 @@ func AddKey(filename string, key ssh.PublicKey) error {
 		return err
 	}
 
-	keys = append(keys, key)
-	return writeKeys(filename, keys)
+	var out []ssh.PublicKey
+	keyBytes := key.Marshal()
+
+	for _, k := range keys {
+		if !bytes.Equal(keyBytes, k.Marshal()) {
+			out = append(out, k)
+		}
+	}
+
+	out = append(out, key)
+	return writeKeys(filename, out, key, true)
 }
 
 func RemoveKey(filename string, key ssh.PublicKey) error {
@@ -241,7 +267,29 @@ func RemoveKey(filename string, key ssh.PublicKey) error {
 		}
 	}
 
-	return writeKeys(filename, outKeys)
+	return writeKeys(filename, outKeys, key, false)
+}
+
+func allKeys() (keys []PublicKeyRecord) {
+	for _, loc := range []string{"pending", "authorized", "rejected"} {
+		keySet, err := readKeys(loc)
+		if err != nil {
+			continue
+		}
+
+		for _, k := range keySet {
+			switch v := k.(type) {
+			case PublicKeyRecord:
+				keys = append(keys, v)
+			default:
+				rec := NewPublicKeyRecord(k, nil)
+				rec.State = loc
+				keys = append(keys, rec)
+			}
+		}
+	}
+
+	return
 }
 
 func findFingerPrint(filename string, fingerprint []byte) (PublicKeyRecord, error) {
@@ -257,14 +305,7 @@ func findFingerPrint(filename string, fingerprint []byte) (PublicKeyRecord, erro
 				return v, nil
 			default:
 				rec := NewPublicKeyRecord(k, nil)
-				switch filename {
-				case "authorized":
-					rec.State = 1
-				case "rejected":
-					rec.State = 0
-				case "pending":
-					rec.State = -1
-				}
+				rec.State = filename
 				return rec, nil
 			}
 		}
@@ -274,7 +315,7 @@ func findFingerPrint(filename string, fingerprint []byte) (PublicKeyRecord, erro
 }
 
 func FindFingerPrint(fingerprint []byte) (rec PublicKeyRecord, err error) {
-	for _, loc := range []string{"pending", "accepted", "rejected"} {
+	for _, loc := range []string{"pending", "authorized", "rejected"} {
 		rec, err = findFingerPrint(loc, fingerprint)
 		if err == nil {
 			return

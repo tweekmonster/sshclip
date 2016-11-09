@@ -20,6 +20,8 @@ const (
 	OpGet                  // Request to get register data.
 	OpPut                  // Request to put data into a register.
 	OpStop                 // Request to stop the server.
+	OpAccept               // Request to accept something.
+	OpReject               // Request to reject something.
 )
 
 const (

@@ -1,8 +1,10 @@
 package server
 
 import (
+	"errors"
 	"io"
 	"net"
+	"strings"
 	"sync"
 
 	"github.com/tweekmonster/sshclip"
@@ -15,6 +17,7 @@ type clientConnection struct {
 	server   *server
 	conn     *ssh.ServerConn
 	channels map[string]ssh.Channel
+	key      ssh.PublicKey
 }
 
 func newClientConnection(c net.Conn, s *server) (*clientConnection, error) {
@@ -23,14 +26,22 @@ func newClientConnection(c net.Conn, s *server) (*clientConnection, error) {
 		return nil, err
 	}
 
-	go ssh.DiscardRequests(requests)
-
 	cli := &clientConnection{
 		server:   s,
 		conn:     conn,
 		channels: make(map[string]ssh.Channel),
 	}
 
+	if keyStr, ok := conn.Permissions.Extensions["pubkey"]; ok {
+		cli.key, err = ssh.ParsePublicKey([]byte(keyStr))
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		return nil, errors.New("pubkey missing from extensions")
+	}
+
+	go ssh.DiscardRequests(requests)
 	go cli.handleChannels(channels)
 
 	return cli, nil
@@ -38,10 +49,11 @@ func newClientConnection(c net.Conn, s *server) (*clientConnection, error) {
 
 func (c *clientConnection) handleChannels(channels <-chan ssh.NewChannel) {
 	for ch := range channels {
-		// 'sshclip' is the standard get/put/notification channel.
 		chname := ch.ChannelType()
-		switch chname {
-		case "sshclip":
+		switch {
+		case strings.HasPrefix(chname, "sshclip"):
+			// "sshclip" is the standard get/put/notification channel.
+			// "sshclip-keys" is the channel for listing/approving client keys.
 			newChan, newRequests, err := ch.Accept()
 			if err != nil {
 				break
@@ -49,7 +61,6 @@ func (c *clientConnection) handleChannels(channels <-chan ssh.NewChannel) {
 
 			go ssh.DiscardRequests(newRequests)
 			go c.serviceChannel(chname, newChan)
-
 		default:
 			ch.Reject(ssh.UnknownChannelType, "Unknown channel type: "+chname)
 		}
@@ -65,8 +76,19 @@ func (c *clientConnection) serviceChannel(name string, ch ssh.Channel) {
 	c.channels[name] = ch
 	c.Unlock()
 
+	var err error
+
+loop:
 	for {
-		err := sshclip.HandlePayload(c.server.storage, ch)
+		switch name {
+		case "sshclip":
+			err = sshclip.HandlePayload(c.server.storage, ch)
+		case "sshclip-keys":
+			err = sshclip.HandleKeyPayload(c.key, ch)
+		default:
+			break loop
+		}
+
 		if err != nil {
 			if err == io.EOF {
 				break

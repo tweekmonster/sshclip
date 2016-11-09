@@ -36,33 +36,35 @@ func (s *server) authenticate(conn ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Pe
 		return nil, errDenied
 	}
 
-	// Pre-fail if the key is pending approval from an existing client.
-	if sshclip.KeyExists("pending", keyRecord) {
-		return nil, errPubKeyPending
-	}
-
 	if !sshclip.KeyExists("authorized", keyRecord) {
-		if !s.seenClient && !sshclip.DataFileExists("keys/authorized") {
+		if !sshclip.DataFileExists("keys/authorized") {
 			// Special case where the first key is added.  Only works if an
 			// authorized connection has never occurred and the authorized key file
 			// doesn't exist.
-			keyRecord.State = 1
-			sshclip.AddKey("authorized", keyRecord)
+			if !s.seenClient {
+				keyRecord.State = "authorized"
+				sshclip.AddKey("authorized", keyRecord)
+			} else {
+				// Don't write the key to the rejected file if the authorized file
+				// doesn't exist.  Otherwise, deleting the authorized file while the
+				// server is running could cause the server to indiscriminately deny
+				// all connections.
+				return nil, errDenied
+			}
 		} else {
-			sshclip.AddKey("pending", keyRecord)
+			sshclip.AddKey("rejected", keyRecord)
 			return nil, errPubKeyPending
 		}
 	}
 
 	s.seenClient = true
-	keyBytes := ssh.MarshalAuthorizedKey(key)
 	perm := &ssh.Permissions{
 		Extensions: map[string]string{
-			"pubkey": string(keyBytes),
+			"pubkey": string(key.Marshal()),
 		},
 	}
 
-	sshclip.Dlog("Authenticatd client:", conn.RemoteAddr(), "Fingerprint:", sshclip.FingerPrint(key))
+	sshclip.Dlog("Authenticated client:", conn.RemoteAddr(), "Fingerprint:", sshclip.FingerPrint(key))
 
 	return perm, nil
 }
