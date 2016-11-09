@@ -3,8 +3,6 @@ package sshclip
 import (
 	"bytes"
 	"encoding/binary"
-	"net"
-	"strconv"
 	"sync"
 	"time"
 
@@ -23,18 +21,7 @@ type SSHRegister struct {
 
 // NewSSHRegister creates a new SSHRegister.
 func NewSSHRegister(host string, port int) (*SSHRegister, error) {
-	clientKey, err := GetClientKey()
-	if err != nil {
-		return nil, err
-	}
-
-	config := &ssh.ClientConfig{
-		Auth: []ssh.AuthMethod{
-			ssh.PublicKeys(clientKey),
-		},
-	}
-
-	conn, err := ssh.Dial("tcp", net.JoinHostPort(host, strconv.Itoa(port)), config)
+	conn, err := SSHClientConnect(host, port)
 	if err != nil {
 		return nil, err
 	}
