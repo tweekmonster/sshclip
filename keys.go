@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"time"
 
 	"golang.org/x/crypto/ssh"
@@ -21,10 +22,12 @@ import (
 
 var KeySize = 2049
 var errKeyExists = errors.New("key exists")
+var errKeyNoRecord = errors.New("key has no record")
 
 type KeyRecord struct {
-	DateAdded time.Time `json:"added"`
-	IP        string    `json:"ip"`
+	Added time.Time `json:"added"`
+	IP    string    `json:"ip"`
+	State int       `json:"state"`
 }
 
 type PublicKeyRecord struct {
@@ -32,24 +35,42 @@ type PublicKeyRecord struct {
 	KeyRecord
 }
 
-func NewPublicKeyRecord(key ssh.PublicKey, addr net.Addr) PublicKeyRecord {
-	ip, _, err := net.SplitHostPort(addr.String())
-	if err != nil {
-		ip = addr.String()
-	}
+type KeyReviewItem struct {
+	FingerPrint []byte
+	KeyRecord
+}
 
-	return PublicKeyRecord{
+func NewPublicKeyRecord(key ssh.PublicKey, addr net.Addr) PublicKeyRecord {
+	rec := PublicKeyRecord{
 		PublicKey: key,
 		KeyRecord: KeyRecord{
-			DateAdded: time.Now(),
-			IP:        ip,
+			Added: time.Now(),
+			State: -1,
 		},
 	}
+
+	if addr != nil {
+		ip, _, err := net.SplitHostPort(addr.String())
+		if err != nil {
+			ip = addr.String()
+		}
+		rec.IP = ip
+	}
+
+	return rec
 }
 
 func (p PublicKeyRecord) MarshalComment() []byte {
 	data, _ := json.Marshal(p.KeyRecord)
 	return data
+}
+
+func GetPublicKeyRecord(key ssh.PublicKey) (KeyRecord, error) {
+	switch v := key.(type) {
+	case PublicKeyRecord:
+		return v.KeyRecord, nil
+	}
+	return KeyRecord{}, errKeyNoRecord
 }
 
 // Generates an SSH public and private key then writes them to a file.
@@ -111,7 +132,7 @@ func GetClientKey() (ssh.Signer, error) {
 func readKeys(filename string) ([]ssh.PublicKey, error) {
 	var keys []ssh.PublicKey
 
-	file, err := OpenDataFile(filename, os.O_RDONLY, 0)
+	file, err := OpenDataFile(filepath.Join("keys", filename), os.O_RDONLY, 0)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return keys, nil
@@ -154,7 +175,7 @@ func readKeys(filename string) ([]ssh.PublicKey, error) {
 }
 
 func writeKeys(filename string, keys []ssh.PublicKey) error {
-	file, err := OpenDataFile(filename, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+	file, err := OpenDataFile(filepath.Join("keys", filename), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
 	if err != nil {
 		return err
 	}
@@ -180,7 +201,7 @@ func writeKeys(filename string, keys []ssh.PublicKey) error {
 	return nil
 }
 
-func keyExists(filename string, key ssh.PublicKey) bool {
+func KeyExists(filename string, key ssh.PublicKey) bool {
 	keys, err := readKeys(filename)
 	if err != nil {
 		return false
@@ -196,7 +217,7 @@ func keyExists(filename string, key ssh.PublicKey) bool {
 	return false
 }
 
-func addKey(filename string, key ssh.PublicKey) error {
+func AddKey(filename string, key ssh.PublicKey) error {
 	keys, err := readKeys(filename)
 	if err != nil {
 		return err
@@ -206,7 +227,7 @@ func addKey(filename string, key ssh.PublicKey) error {
 	return writeKeys(filename, keys)
 }
 
-func removeKey(filename string, key ssh.PublicKey) error {
+func RemoveKey(filename string, key ssh.PublicKey) error {
 	keys, err := readKeys(filename)
 	if err != nil {
 		return err
@@ -223,48 +244,68 @@ func removeKey(filename string, key ssh.PublicKey) error {
 	return writeKeys(filename, outKeys)
 }
 
-func isAuthorizedKey(key ssh.PublicKey) bool {
-	return keyExists("keys/authorized", key)
+func findFingerPrint(filename string, fingerprint []byte) (PublicKeyRecord, error) {
+	keys, err := readKeys(filename)
+	if err != nil {
+		return PublicKeyRecord{}, err
+	}
+
+	for _, k := range keys {
+		if bytes.Equal(fingerprint, FingerPrintBytes(k)) {
+			switch v := k.(type) {
+			case PublicKeyRecord:
+				return v, nil
+			default:
+				rec := NewPublicKeyRecord(k, nil)
+				switch filename {
+				case "authorized":
+					rec.State = 1
+				case "rejected":
+					rec.State = 0
+				case "pending":
+					rec.State = -1
+				}
+				return rec, nil
+			}
+		}
+	}
+
+	return PublicKeyRecord{}, ErrNotExist
+}
+
+func FindFingerPrint(fingerprint []byte) (rec PublicKeyRecord, err error) {
+	for _, loc := range []string{"pending", "accepted", "rejected"} {
+		rec, err = findFingerPrint(loc, fingerprint)
+		if err == nil {
+			return
+		}
+	}
+
+	err = ErrNotExist
+	return
 }
 
 // IsAuthorizedKey checks if a key is authorized.  If the authorized keys file
 // does not exist, save the key and return true.
 func IsAuthorizedKey(key ssh.PublicKey) bool {
 	if !DataFileExists("keys/authorized") {
-		if err := AddAuthorizedKey(key); err == nil {
+		if err := AddKey("authorized", key); err == nil {
 			return true
 		}
 		return false
 	}
 
-	return isAuthorizedKey(key)
+	return KeyExists("authorized", key)
 }
 
-// AddAuthorizedKey adds a key to the authorized keys file.
-func AddAuthorizedKey(key ssh.PublicKey) error {
-	if isAuthorizedKey(key) {
-		return errKeyExists
-	}
-
-	return addKey("keys/authorized", key)
+func FingerPrintBytes(key ssh.PublicKey) []byte {
+	keyBytes := key.Marshal()
+	h := sha256.New()
+	h.Write(keyBytes)
+	return h.Sum(nil)
 }
 
 // FingerPrint returns the ssh.PublicKey SHA256 finger print.
 func FingerPrint(key ssh.PublicKey) string {
-	keyBytes := key.Marshal()
-	h := sha256.New()
-	h.Write(keyBytes)
-	return fmt.Sprintf("SHA256:%s", base64.StdEncoding.EncodeToString(h.Sum(nil)))
-}
-
-func IsPendingKey(key ssh.PublicKey) bool {
-	return keyExists("keys/pending", key)
-}
-
-func AddPendingKey(key ssh.PublicKey) error {
-	return addKey("keys/pending", key)
-}
-
-func RemovePendingKey(key ssh.PublicKey) error {
-	return removeKey("keys/pending", key)
+	return fmt.Sprintf("SHA256:%s", base64.StdEncoding.EncodeToString(FingerPrintBytes(key)))
 }

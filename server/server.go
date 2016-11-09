@@ -14,14 +14,16 @@ import (
 )
 
 var errPubKeyPending = errors.New("PublicKey is pending approval")
+var errDenied = errors.New("denied")
 
 type server struct {
 	sync.RWMutex
-	conn     net.Listener
-	config   ssh.ServerConfig
-	keysFile string
-	clients  []*clientConnection
-	storage  *sshclip.MemoryRegister
+	conn       net.Listener
+	config     ssh.ServerConfig
+	keysFile   string
+	clients    []*clientConnection
+	storage    *sshclip.MemoryRegister
+	seenClient bool
 }
 
 func (s *server) authenticate(conn ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Permissions, error) {
@@ -30,16 +32,29 @@ func (s *server) authenticate(conn ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Pe
 
 	keyRecord := sshclip.NewPublicKeyRecord(key, conn.RemoteAddr())
 
+	if sshclip.KeyExists("rejected", keyRecord) {
+		return nil, errDenied
+	}
+
 	// Pre-fail if the key is pending approval from an existing client.
-	if sshclip.IsPendingKey(keyRecord) {
+	if sshclip.KeyExists("pending", keyRecord) {
 		return nil, errPubKeyPending
 	}
 
-	if !sshclip.IsAuthorizedKey(keyRecord) {
-		sshclip.AddPendingKey(keyRecord)
-		return nil, errPubKeyPending
+	if !sshclip.KeyExists("authorized", keyRecord) {
+		if !s.seenClient && !sshclip.DataFileExists("keys/authorized") {
+			// Special case where the first key is added.  Only works if an
+			// authorized connection has never occurred and the authorized key file
+			// doesn't exist.
+			keyRecord.State = 1
+			sshclip.AddKey("authorized", keyRecord)
+		} else {
+			sshclip.AddKey("pending", keyRecord)
+			return nil, errPubKeyPending
+		}
 	}
 
+	s.seenClient = true
 	keyBytes := ssh.MarshalAuthorizedKey(key)
 	perm := &ssh.Permissions{
 		Extensions: map[string]string{
