@@ -1,22 +1,32 @@
 #include "clipboard_darwin.h"
 
-static NSPasteboard *pb;
-static NSInteger lastChangeCount;
+static NSInteger changeCount;
 
-void setup() {
-  pb = [NSPasteboard generalPasteboard];
-}
+char * getClipboard(int *length) {
+  NSPasteboard *pb = [NSPasteboard generalPasteboard];
 
-char * getClipboard() {
-  if ([pb changeCount] == lastChangeCount) {
+  if ([pb changeCount] == changeCount) {
     return NULL;
   }
 
-  const char *text = [[pb stringForType:NSStringPboardType] UTF8String];
-  int len = strlen(text);
-  char *buf = (char *)malloc(len);
-  strncpy(buf, text, len);
-  buf[len] = '\0';
+  changeCount = [pb changeCount];
+
+  NSArray *types = @[[NSString class]];
+  NSString *avail = [pb availableTypeFromArray:@[NSStringPboardType]];
+
+  if (avail == nil) {
+    return NULL;
+  }
+
+  NSData *data = [pb dataForType:NSStringPboardType];
+  if (data == nil) {
+    return NULL;
+  }
+
+  *length = (int)[data length];
+  char *buf = (char *)malloc(*length);
+  memcpy(buf, [data bytes], *length);
+
   return buf;
 }
 

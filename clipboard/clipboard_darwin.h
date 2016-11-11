@@ -3,8 +3,7 @@
 #include <Foundation/Foundation.h>
 #include <AppKit/AppKit.h>
 
-void setup();
-char * getClipboard();
+char * getClipboard(int *length);
 int setClipboard(char *buf);
 
 #endif /* ifndef CLIPBOARD_DARWIN_H */

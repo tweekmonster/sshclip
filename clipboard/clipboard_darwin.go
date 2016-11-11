@@ -7,22 +7,32 @@ package clipboard
 #include "clipboard_darwin.h"
 */
 import "C"
-import "unsafe"
+import (
+	"time"
+	"unsafe"
+)
 
-func init() {
-	C.setup()
+func setup() bool {
+	return true
 }
 
-func clipboardContents() string {
-	contents := C.getClipboard()
-	if contents != nil {
-		out := C.GoString(contents)
+func clipboardContents() []byte {
+	var length C.int
+	contents := C.getClipboard(&length)
+	if length > 0 && contents != nil {
+		out := C.GoBytes(unsafe.Pointer(contents), length)
 		C.free(unsafe.Pointer(contents))
-		return out
+		return []byte(out)
 	}
-	return ""
+	return nil
 }
 
-func watch(out <-chan []byte) {
-
+func watch(out chan []byte) {
+	t := time.NewTicker(time.Millisecond * 500)
+	for _ = range t.C {
+		data := clipboardContents()
+		if data != nil {
+			out <- data
+		}
+	}
 }

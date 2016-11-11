@@ -25,7 +25,7 @@ const (
 )
 
 const (
-	VimCharAttr int = 1 << iota
+	VimCharAttr uint8 = 1 << iota
 	VimLineAttr
 	VimBlockAttr
 	URLAttr

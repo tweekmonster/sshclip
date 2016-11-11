@@ -1,6 +1,14 @@
 package clipboard
 
+func setup() bool {
+	return false
+}
+
 // Stub
-func clipboardContents() string {
-	return ""
+func clipboardContents() []byte {
+	return nil
+}
+
+func watch(out chan []byte) {
+
 }

@@ -8,6 +8,7 @@ import (
 
 	"github.com/kardianos/osext"
 	"github.com/tweekmonster/sshclip"
+	"github.com/tweekmonster/sshclip/clipboard"
 )
 
 // Spawn starts a local monitoring process.
@@ -63,6 +64,11 @@ func LocalListen(sshHost string, sshPort int) error {
 	if err != nil {
 		sshclip.Elog(err)
 		return err
+	}
+
+	if clipboard.Enabled() {
+		sshclip.Dlog("Starting system clipboard monitor")
+		go clipboard.Monitor(sshClient, '+')
 	}
 
 	return sshclip.ListenLoop(conn, func(c net.Conn) {
