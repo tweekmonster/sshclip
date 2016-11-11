@@ -12,6 +12,7 @@ import (
 var enabled = false
 var errEmpty = errors.New("empty")
 var ErrUnavailable = errors.New("clipboard unavailable")
+var stop = sshclip.CreateUniqueEvent("ClipboardMonitorStop")
 
 func init() {
 	enabled = setup()
@@ -21,12 +22,16 @@ func Enabled() bool {
 	return enabled
 }
 
+func MonitorStop() {
+	sshclip.DispatchEvent(stop)
+}
+
 func Monitor(storage sshclip.Register, reg uint8) error {
 	if !enabled {
 		return ErrUnavailable
 	}
 
-	events := sshclip.CreateListener(sshclip.Interrupt, sshclip.Terminate)
+	events := sshclip.CreateListener(sshclip.Terminate, stop)
 	watchChan := make(chan []byte)
 	go watch(watchChan)
 

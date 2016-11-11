@@ -15,9 +15,10 @@ import (
 // registers set by other clients.
 type SSHRegister struct {
 	sync.RWMutex
-	ch      ssh.Channel
-	putChan chan RegisterItem
-	storage *MemoryRegister
+	ch       ssh.Channel
+	putChan  chan RegisterItem
+	storage  *MemoryRegister
+	requests <-chan *ssh.Request
 }
 
 // NewSSHRegister creates a new SSHRegister.
@@ -33,13 +34,11 @@ func NewSSHRegister(host string, port int, storage *MemoryRegister) (*SSHRegiste
 	}
 
 	cli := &SSHRegister{
-		ch:      ch,
-		putChan: make(chan RegisterItem, 4),
-		storage: storage,
+		ch:       ch,
+		putChan:  make(chan RegisterItem, 4),
+		storage:  storage,
+		requests: reqs,
 	}
-
-	go cli.handleRequests(reqs)
-	go cli.handleDeferredPut()
 
 	return cli, nil
 
@@ -78,8 +77,11 @@ func (c *SSHRegister) syncRegister(reg uint8) {
 	}
 }
 
-func (c *SSHRegister) handleRequests(requests <-chan *ssh.Request) {
-	for req := range requests {
+func (c *SSHRegister) Run() {
+	go c.handleDeferredPut()
+	defer c.Close()
+
+	for req := range c.requests {
 		switch req.Type {
 		case "sync":
 			var syncItem RegisterItemHash
@@ -98,8 +100,6 @@ func (c *SSHRegister) handleRequests(requests <-chan *ssh.Request) {
 			req.Reply(false, nil)
 		}
 	}
-
-	c.Close()
 
 	Dlog("SSHRegister shutdown")
 }

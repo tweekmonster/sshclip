@@ -69,10 +69,16 @@ func LocalListen(sshHost string, sshPort int) error {
 		return err
 	}
 
-	if clipboard.Enabled() {
-		sshclip.Dlog("Starting system clipboard monitor")
-		go clipboard.Monitor(sshClient, '+')
-	}
+	go func() {
+		if clipboard.Enabled() {
+			sshclip.Dlog("Starting system clipboard monitor")
+			go clipboard.Monitor(sshClient, '+')
+		}
+
+		sshClient.Run()
+		clipboard.MonitorStop()
+		sshclip.ListenLoopStop()
+	}()
 
 	go func() {
 		msgBytes := make([]byte, 2)
