@@ -34,18 +34,10 @@
 			"notests": true
 		},
 		{
-			"importpath": "github.com/kardianos/service",
-			"repository": "https://github.com/kardianos/service",
-			"vcs": "git",
-			"revision": "7a88211485df5d3da6ec68f4f8a5ff9bec297327",
-			"branch": "master",
-			"notests": true
-		},
-		{
 			"importpath": "github.com/mattn/go-colorable",
 			"repository": "https://github.com/mattn/go-colorable",
 			"vcs": "git",
-			"revision": "6c903ff4aa50920ca86087a280590b36b3152b9c",
+			"revision": "d228849504861217f796da67fae4f6e347643f15",
 			"branch": "master",
 			"notests": true
 		},
@@ -55,14 +47,6 @@
 			"vcs": "git",
 			"revision": "66b8e73f3f5cda9f96b69efd03dd3d7fc4a5cdb8",
 			"branch": "master",
-			"notests": true
-		},
-		{
-			"importpath": "github.com/natefinch/npipe",
-			"repository": "https://github.com/natefinch/npipe",
-			"vcs": "git",
-			"revision": "c1b8fa8bdccecb0b8db834ee0b92fdbcfa606dd6",
-			"branch": "v2",
 			"notests": true
 		},
 		{
@@ -85,7 +69,7 @@
 			"importpath": "golang.org/x/crypto/curve25519",
 			"repository": "https://go.googlesource.com/crypto",
 			"vcs": "git",
-			"revision": "1150b8bd09e53aea1d415621adae9bad665061a1",
+			"revision": "9477e0b78b9ac3d0b03822fd95422e2fe07627cd",
 			"branch": "master",
 			"path": "curve25519",
 			"notests": true
@@ -94,7 +78,7 @@
 			"importpath": "golang.org/x/crypto/ed25519",
 			"repository": "https://go.googlesource.com/crypto",
 			"vcs": "git",
-			"revision": "1150b8bd09e53aea1d415621adae9bad665061a1",
+			"revision": "9477e0b78b9ac3d0b03822fd95422e2fe07627cd",
 			"branch": "master",
 			"path": "ed25519",
 			"notests": true
@@ -103,7 +87,7 @@
 			"importpath": "golang.org/x/crypto/ssh",
 			"repository": "https://go.googlesource.com/crypto",
 			"vcs": "git",
-			"revision": "1150b8bd09e53aea1d415621adae9bad665061a1",
+			"revision": "9477e0b78b9ac3d0b03822fd95422e2fe07627cd",
 			"branch": "master",
 			"path": "/ssh",
 			"notests": true
@@ -112,18 +96,9 @@
 			"importpath": "golang.org/x/sys/unix",
 			"repository": "https://go.googlesource.com/sys",
 			"vcs": "git",
-			"revision": "c200b10b5d5e122be351b67af224adc6128af5bf",
+			"revision": "b699b7032584f0953262cb2788a0ca19bb494703",
 			"branch": "master",
 			"path": "/unix",
-			"notests": true
-		},
-		{
-			"importpath": "golang.org/x/sys/windows",
-			"repository": "https://go.googlesource.com/sys",
-			"vcs": "git",
-			"revision": "c200b10b5d5e122be351b67af224adc6128af5bf",
-			"branch": "master",
-			"path": "windows",
 			"notests": true
 		},
 		{
@@ -138,7 +113,7 @@
 			"importpath": "gopkg.in/urfave/cli.v2",
 			"repository": "https://gopkg.in/urfave/cli.v2",
 			"vcs": "git",
-			"revision": "76d8eaf9fefb51eb5b24fdee043c8b5ea1a49fe3",
+			"revision": "e485446237011b8abac93919242e6f059ad56c87",
 			"branch": "v2",
 			"notests": true
 		},
