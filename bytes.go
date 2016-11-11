@@ -79,7 +79,7 @@ func ReadPayloadData(r io.Reader) ([]byte, error) {
 	}
 
 	data := make([]byte, size)
-	n, err := r.Read(data)
+	n, err := io.ReadAtLeast(r, data, size)
 	if err != nil {
 		return nil, err
 	}
