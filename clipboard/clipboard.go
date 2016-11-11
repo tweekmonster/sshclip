@@ -61,5 +61,9 @@ func Monitor(storage sshclip.Register, reg uint8) error {
 }
 
 func Get() []byte {
-	return clipboardContents()
+	return getClipboardData()
+}
+
+func Put(data []byte) error {
+	return putClipboardData(data)
 }

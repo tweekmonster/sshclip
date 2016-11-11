@@ -4,7 +4,11 @@ func setup() bool {
 	return false
 }
 
-func clipboardContents() []byte {
+func getClipboardData() []byte {
+	return nil
+}
+
+func putClipboardData(data []byte) error {
 	return nil
 }
 

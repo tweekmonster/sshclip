@@ -4,6 +4,6 @@
 #include <AppKit/AppKit.h>
 
 char * getClipboard(int *length);
-int setClipboard(char *buf);
+char * setClipboard(char *buf, int length);
 
 #endif /* ifndef CLIPBOARD_DARWIN_H */

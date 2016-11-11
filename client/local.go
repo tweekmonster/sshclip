@@ -2,6 +2,7 @@ package client
 
 import (
 	"encoding/binary"
+	"io"
 	"net"
 	"os"
 	"strconv"
@@ -82,7 +83,14 @@ func LocalListen(sshHost string, sshPort int) error {
 			reg := msgBytes[1]
 
 			if op == sshclip.OpPut && reg == '+' {
-				// stub
+				if item, err := storage.GetItem(reg); err == nil {
+					data := make([]byte, item.Size())
+					if _, err := io.ReadAtLeast(item, data, item.Size()); err == nil {
+						if err := clipboard.Put(data); err != nil {
+							sshclip.Elog("Error setting clipboard:", err)
+						}
+					}
+				}
 			}
 		}
 	}()

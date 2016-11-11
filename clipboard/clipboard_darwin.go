@@ -8,6 +8,7 @@ package clipboard
 */
 import "C"
 import (
+	"errors"
 	"time"
 	"unsafe"
 )
@@ -16,7 +17,7 @@ func setup() bool {
 	return true
 }
 
-func clipboardContents() []byte {
+func getClipboardData() []byte {
 	var length C.int
 	contents := C.getClipboard(&length)
 	if length > 0 && contents != nil {
@@ -27,10 +28,20 @@ func clipboardContents() []byte {
 	return nil
 }
 
+func putClipboardData(data []byte) error {
+	var err error
+	res := C.setClipboard((*C.char)(unsafe.Pointer(&data[0])), C.int(len(data)))
+	if res != nil {
+		err = errors.New(C.GoString(res))
+		C.free(unsafe.Pointer(res))
+	}
+	return err
+}
+
 func watch(out chan []byte) {
 	t := time.NewTicker(time.Millisecond * 500)
 	for _ = range t.C {
-		data := clipboardContents()
+		data := getClipboardData()
 		if data != nil {
 			out <- data
 		}

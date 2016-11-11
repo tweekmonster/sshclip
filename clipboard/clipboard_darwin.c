@@ -11,9 +11,7 @@ char * getClipboard(int *length) {
 
   changeCount = [pb changeCount];
 
-  NSArray *types = @[[NSString class]];
   NSString *avail = [pb availableTypeFromArray:@[NSStringPboardType]];
-
   if (avail == nil) {
     return NULL;
   }
@@ -30,6 +28,27 @@ char * getClipboard(int *length) {
   return buf;
 }
 
-int setClipboard(char *buf) {
-  return 0;
+char * setClipboard(char *buf, int length) {
+  NSPasteboard *pb = [NSPasteboard generalPasteboard];
+  changeCount = [pb declareTypes:@[NSStringPboardType] owner:nil];
+  NSData *data = [NSData dataWithBytes:(const void *)buf length:length];
+
+  @try {
+    if ([pb setData:data forType:NSStringPboardType] == NO) {
+      // This is not a try...catch block just for this exception!
+      // [NSPasteboard setData:forType] raises exceptions when there's problems
+      // connecting to the pasteboard.
+      [NSException raise:@"sshclip error" format:@"Unable to set clipboard data"];
+    }
+  } @catch (NSException *e) {
+    const char *err = [[NSString stringWithFormat:@"%@: %@", [e name], [e reason]] UTF8String];
+    int length = strlen(err);
+    char *buf = (char *)malloc(length);
+    memcpy(buf, err, length);
+    return buf;
+  } @finally {
+    [data release];
+  }
+
+  return NULL;
 }
