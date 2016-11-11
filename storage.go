@@ -2,12 +2,13 @@ package sshclip
 
 import (
 	"bytes"
-	"crypto/md5"
 	"encoding/binary"
 	"errors"
 	"io"
 	"sync"
 	"time"
+
+	"golang.org/x/crypto/blake2b"
 )
 
 var ErrTooLarge = errors.New("storage data too large")
@@ -34,28 +35,22 @@ type Register interface {
 
 type RegisterItemHash struct {
 	Register uint8
-	Hash     [16]byte
+	Hash     [32]byte
 }
 
 // MemoryRegisterItem is an in-memory Register entry.
 type MemoryRegisterItem struct {
 	created time.Time
-	hash    [16]byte
+	hash    [32]byte
 	index   uint8
 	attrs   uint8
 	data    []byte
 }
 
 func NewMemoryRegisterItem(reg, attrs uint8, data []byte) *MemoryRegisterItem {
-	h := md5.New()
-	h.Write([]byte{attrs})
-	h.Write(data)
-	var md5sum [16]byte
-	copy(md5sum[:], h.Sum(nil))
-
 	return &MemoryRegisterItem{
 		created: time.Now(),
-		hash:    md5sum,
+		hash:    blake2b.Sum256(data),
 		index:   reg,
 		attrs:   attrs,
 		data:    data,
@@ -172,6 +167,7 @@ func (m *MemoryRegister) PutItem(reg, attrs uint8, data []byte) error {
 				return ErrTooLarge
 			}
 			item.data = append(item.data, data...)
+			item.hash = blake2b.Sum256(item.data)
 			return nil
 		}
 	}
