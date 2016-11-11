@@ -1,4 +1,4 @@
-package clipboard
+package platform
 
 /*
 #cgo CFLAGS: -x objective-c
@@ -13,7 +13,7 @@ import (
 	"unsafe"
 )
 
-func setup() bool {
+func setupClipboard() bool {
 	return true
 }
 
@@ -38,7 +38,7 @@ func putClipboardData(data []byte) error {
 	return err
 }
 
-func watch(out chan []byte) {
+func watchClipboard(out chan []byte) {
 	t := time.NewTicker(time.Millisecond * 500)
 	for _ = range t.C {
 		data := getClipboardData()

@@ -1,6 +1,6 @@
-package clipboard
+package platform
 
-func setup() bool {
+func setupClipboard() bool {
 	return false
 }
 
@@ -12,6 +12,6 @@ func putClipboardData(data []byte) error {
 	return nil
 }
 
-func watch(out chan []byte) {
+func watchClipboard(out chan []byte) {
 
 }

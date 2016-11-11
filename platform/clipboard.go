@@ -1,4 +1,4 @@
-package clipboard
+package platform
 
 import (
 	"bytes"
@@ -9,31 +9,31 @@ import (
 	"github.com/tweekmonster/sshclip"
 )
 
-var enabled = false
+var clipboardEnabled = false
 var errEmpty = errors.New("empty")
-var ErrUnavailable = errors.New("clipboard unavailable")
+var ErrClipboardUnavailable = errors.New("clipboard unavailable")
 var stop = sshclip.CreateUniqueEvent("ClipboardMonitorStop")
 
 func init() {
-	enabled = setup()
+	clipboardEnabled = setupClipboard()
 }
 
-func Enabled() bool {
-	return enabled
+func ClipboardEnabled() bool {
+	return clipboardEnabled
 }
 
-func MonitorStop() {
+func ClipboardMonitorStop() {
 	sshclip.DispatchEvent(stop)
 }
 
-func Monitor(storage sshclip.Register, reg uint8) error {
-	if !enabled {
-		return ErrUnavailable
+func ClipboardMonitor(storage sshclip.Register, reg uint8) error {
+	if !clipboardEnabled {
+		return ErrClipboardUnavailable
 	}
 
 	events := sshclip.CreateListener(sshclip.Terminate, stop)
 	watchChan := make(chan []byte)
-	go watch(watchChan)
+	go watchClipboard(watchChan)
 
 	var prevHash [32]byte
 
@@ -60,10 +60,10 @@ func Monitor(storage sshclip.Register, reg uint8) error {
 	}
 }
 
-func Get() []byte {
+func ClipboardGet() []byte {
 	return getClipboardData()
 }
 
-func Put(data []byte) error {
+func ClipboardPut(data []byte) error {
 	return putClipboardData(data)
 }

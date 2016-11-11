@@ -10,7 +10,7 @@ import (
 
 	"github.com/kardianos/osext"
 	"github.com/tweekmonster/sshclip"
-	"github.com/tweekmonster/sshclip/clipboard"
+	"github.com/tweekmonster/sshclip/platform"
 )
 
 // Spawn starts a local monitoring process.
@@ -70,13 +70,13 @@ func LocalListen(sshHost string, sshPort int) error {
 	}
 
 	go func() {
-		if clipboard.Enabled() {
+		if platform.ClipboardEnabled() {
 			sshclip.Dlog("Starting system clipboard monitor")
-			go clipboard.Monitor(sshClient, '+')
+			go platform.ClipboardMonitor(sshClient, '+')
 		}
 
 		sshClient.Run()
-		clipboard.MonitorStop()
+		platform.ClipboardMonitorStop()
 		sshclip.ListenLoopStop()
 	}()
 
@@ -92,7 +92,7 @@ func LocalListen(sshHost string, sshPort int) error {
 				if item, err := storage.GetItem(reg); err == nil {
 					data := make([]byte, item.Size())
 					if _, err := io.ReadAtLeast(item, data, item.Size()); err == nil {
-						if err := clipboard.Put(data); err != nil {
+						if err := platform.ClipboardPut(data); err != nil {
 							sshclip.Elog("Error setting clipboard:", err)
 						}
 					}
