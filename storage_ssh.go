@@ -3,6 +3,7 @@ package sshclip
 import (
 	"bytes"
 	"encoding/binary"
+	"io"
 	"sync"
 	"time"
 
@@ -16,11 +17,11 @@ type SSHRegister struct {
 	sync.RWMutex
 	ch      ssh.Channel
 	putChan chan RegisterItem
-	items   map[uint8]RegisterItem
+	storage *MemoryRegister
 }
 
 // NewSSHRegister creates a new SSHRegister.
-func NewSSHRegister(host string, port int) (*SSHRegister, error) {
+func NewSSHRegister(host string, port int, storage *MemoryRegister) (*SSHRegister, error) {
 	conn, err := SSHClientConnect(host, port)
 	if err != nil {
 		return nil, err
@@ -34,7 +35,7 @@ func NewSSHRegister(host string, port int) (*SSHRegister, error) {
 	cli := &SSHRegister{
 		ch:      ch,
 		putChan: make(chan RegisterItem, 4),
-		items:   make(map[uint8]RegisterItem),
+		storage: storage,
 	}
 
 	go cli.handleRequests(reqs)
@@ -42,6 +43,19 @@ func NewSSHRegister(host string, port int) (*SSHRegister, error) {
 
 	return cli, nil
 
+}
+
+func (c *SSHRegister) putItem(item RegisterItem, notify bool) error {
+	data := make([]byte, item.Size())
+	if _, err := io.ReadAtLeast(item, data, item.Size()); err != nil {
+		return err
+	}
+
+	if notify {
+		return c.storage.Put(uint8(item.Index()), item.Attributes(), data)
+	}
+
+	return c.storage.PutItem(uint8(item.Index()), item.Attributes(), data)
 }
 
 func (c *SSHRegister) syncRegister(reg uint8) {
@@ -52,32 +66,31 @@ func (c *SSHRegister) syncRegister(reg uint8) {
 		return
 	}
 
-	c.Lock()
-	existing, ok := c.items[uint8(item.Index())]
-	if ok && t.Before(existing.Time()) {
+	existing, err := c.storage.GetItem(uint8(item.Index()))
+	if err == nil && t.Before(existing.Time()) {
 		// The cache was updated in the time it took to get the remote register.
 		Dlog("Cache is newer than the retrieved register")
 		return
 	}
-	c.items[uint8(item.Index())] = item
-	c.Unlock()
+
+	if err := c.putItem(item, true); err != nil {
+		Elog(err)
+	}
 }
 
 func (c *SSHRegister) handleRequests(requests <-chan *ssh.Request) {
 	for req := range requests {
 		switch req.Type {
 		case "sync":
-			Dlog("Syncing: %#v", req.Payload)
 			var syncItem RegisterItemHash
 			if err := binary.Read(bytes.NewBuffer(req.Payload), binary.BigEndian, &syncItem); err == nil {
-				c.Lock()
-				if item, ok := c.items[syncItem.Register]; ok {
+				if item, err := c.storage.GetItem(syncItem.Register); err == nil {
 					if !item.EqualsHash(syncItem) {
+						Dlog("Sync register: %c", syncItem.Register)
 						// Use a goroutine to prevent blocking normal caching.
 						go c.syncRegister(syncItem.Register)
 					}
 				}
-				c.Unlock()
 			}
 		}
 
@@ -112,22 +125,18 @@ func (c *SSHRegister) Get(reg uint8) (RegisterItem, error) {
 		return nil, ErrInvalidIndex
 	}
 
-	c.RLock()
-	if item, ok := c.items[reg]; ok {
-		c.RUnlock()
+	if item, err := c.storage.GetItem(reg); err == nil {
 		return item, nil
 	}
 
 	item, err := GetRegister(c.ch, reg)
 	if err != nil {
-		c.RUnlock()
 		return nil, err
 	}
-	c.RUnlock()
 
-	c.Lock()
-	c.items[reg] = item
-	c.Unlock()
+	if err := c.putItem(item, false); err != nil {
+		return nil, err
+	}
 
 	return item, nil
 }
@@ -138,10 +147,14 @@ func (c *SSHRegister) Put(reg uint8, attrs uint8, data []byte) (err error) {
 		return ErrInvalidIndex
 	}
 
-	c.Lock()
-	item := NewMemoryRegisterItem(reg, attrs, data)
-	c.items[reg] = item
-	c.Unlock()
+	if err := c.storage.PutItem(reg, attrs, data); err != nil {
+		return err
+	}
+
+	item, err := c.storage.GetItem(reg)
+	if err != nil {
+		return err
+	}
 
 	c.putChan <- item
 
@@ -149,7 +162,5 @@ func (c *SSHRegister) Put(reg uint8, attrs uint8, data []byte) (err error) {
 }
 
 func (c *SSHRegister) List() ([]RegisterItemHash, error) {
-	c.Lock()
-	defer c.Unlock()
-	return ListRegisters(c.ch)
+	return c.storage.List()
 }

@@ -1,6 +1,7 @@
 package client
 
 import (
+	"encoding/binary"
 	"net"
 	"os"
 	"strconv"
@@ -54,7 +55,8 @@ func Spawn(host string, port int) error {
 // The purpose of this is to maintain a fast local cache to keep the clients
 // responsive.
 func LocalListen(sshHost string, sshPort int) error {
-	sshClient, err := sshclip.NewSSHRegister(sshHost, sshPort)
+	storage := sshclip.NewMemoryRegister()
+	sshClient, err := sshclip.NewSSHRegister(sshHost, sshPort, storage)
 	if err != nil {
 		sshclip.Elog(err)
 		return err
@@ -70,6 +72,20 @@ func LocalListen(sshHost string, sshPort int) error {
 		sshclip.Dlog("Starting system clipboard monitor")
 		go clipboard.Monitor(sshClient, '+')
 	}
+
+	go func() {
+		msgBytes := make([]byte, 2)
+
+		for msg := range storage.Notify {
+			binary.BigEndian.PutUint16(msgBytes, msg)
+			op := msgBytes[0]
+			reg := msgBytes[1]
+
+			if op == sshclip.OpPut && reg == '+' {
+				// stub
+			}
+		}
+	}()
 
 	return sshclip.ListenLoop(conn, func(c net.Conn) {
 		sshclip.HandlePayload(sshClient, c)

@@ -115,10 +115,8 @@ func (s *server) removeClient(c *clientConnection) {
 
 // Send a request to all clients on a specific channel.
 func (s *server) broadcast(channel, name string, data []byte) {
-	sshclip.Dlog("Broadcast")
 	s.Lock()
 	defer s.Unlock()
-	sshclip.Dlog("Broadcast start")
 
 	clients := s.clients
 	s.clients = s.clients[:0]
@@ -142,7 +140,6 @@ func (s *server) notificationRoutine() {
 
 	for msg := range s.storage.Notify {
 		binary.BigEndian.PutUint16(msgBytes, msg)
-		sshclip.Dlog("Notification: %#v", msgBytes)
 		op := msgBytes[0]
 		reg := msgBytes[1]
 
