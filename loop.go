@@ -1,28 +1,15 @@
 package sshclip
 
-import (
-	"net"
-	"os"
-	"os/signal"
-	"syscall"
-)
+import "net"
 
-var loopStop = make(chan os.Signal)
-
-type manualStopSignal int
-
-func (manualStopSignal) Signal()        {}
-func (manualStopSignal) String() string { return "Manual Stop" }
-
-func init() {
-	signal.Notify(loopStop, os.Interrupt, syscall.SIGTERM)
-}
+var manualStop = CreateEvent("ManualLoopStop")
+var loopStop = CreateListener(Interrupt, Terminate, manualStop)
 
 func ListenLoopStop() {
-	loopStop <- manualStopSignal(0)
+	DispatchEvent(manualStop)
 }
 
-// ListenLoop waits for an interrupt signal while accepting connections from a
+// ListenLoop waits for an stop event while accepting connections from a
 // listener in a goroutine.
 func ListenLoop(listener net.Listener, handler func(net.Conn)) error {
 	conn := make(chan net.Conn)
@@ -43,8 +30,8 @@ func ListenLoop(listener net.Listener, handler func(net.Conn)) error {
 		select {
 		case err := <-errs:
 			return err
-		case sig := <-loopStop:
-			Dlog("Got signal:", sig)
+		case e := <-loopStop:
+			Dlog("Got event:", e)
 			return listener.Close()
 		case c := <-conn:
 			Dlog("Connection from:", c.RemoteAddr())

@@ -3,9 +3,6 @@ package clipboard
 import (
 	"bytes"
 	"errors"
-	"os"
-	"os/signal"
-	"syscall"
 
 	"golang.org/x/crypto/blake2b"
 
@@ -29,9 +26,7 @@ func Monitor(storage sshclip.Register, reg uint8) error {
 		return ErrUnavailable
 	}
 
-	signals := make(chan os.Signal)
-	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
-
+	events := sshclip.CreateListener(sshclip.Interrupt, sshclip.Terminate)
 	watchChan := make(chan []byte)
 	go watch(watchChan)
 
@@ -54,7 +49,7 @@ func Monitor(storage sshclip.Register, reg uint8) error {
 
 				storage.Put(reg, attrs, data)
 			}
-		case <-signals:
+		case <-events:
 			return nil
 		}
 	}
