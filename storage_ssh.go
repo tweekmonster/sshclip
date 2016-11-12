@@ -1,8 +1,6 @@
 package sshclip
 
 import (
-	"bytes"
-	"encoding/binary"
 	"io"
 	"sync"
 	"time"
@@ -19,29 +17,19 @@ type SSHRegister struct {
 	putChan  chan RegisterItem
 	storage  *MemoryRegister
 	requests <-chan *ssh.Request
+	host     string
+	port     int
 }
 
 // NewSSHRegister creates a new SSHRegister.
 func NewSSHRegister(host string, port int, storage *MemoryRegister) (*SSHRegister, error) {
-	conn, err := SSHClientConnect(host, port)
-	if err != nil {
-		return nil, err
-	}
-
-	ch, reqs, err := conn.OpenChannel("sshclip", nil)
-	if err != nil {
-		return nil, err
-	}
-
 	cli := &SSHRegister{
-		ch:       ch,
-		putChan:  make(chan RegisterItem, 4),
-		storage:  storage,
-		requests: reqs,
+		storage: storage,
+		host:    host,
+		port:    port,
 	}
 
 	return cli, nil
-
 }
 
 func (c *SSHRegister) putItem(item RegisterItem, notify bool) error {
@@ -75,48 +63,6 @@ func (c *SSHRegister) syncRegister(reg uint8) {
 	if err := c.putItem(item, true); err != nil {
 		Elog(err)
 	}
-}
-
-func (c *SSHRegister) Run() {
-	go c.handleDeferredPut()
-	defer c.Close()
-
-	for req := range c.requests {
-		switch req.Type {
-		case "sync":
-			var syncItem RegisterItemHash
-			if err := binary.Read(bytes.NewBuffer(req.Payload), binary.BigEndian, &syncItem); err == nil {
-				if item, err := c.storage.GetItem(syncItem.Register); err == nil {
-					if !item.EqualsHash(syncItem) {
-						Dlog("Sync register: %c", syncItem.Register)
-						// Use a goroutine to prevent blocking normal caching.
-						go c.syncRegister(syncItem.Register)
-					}
-				}
-			}
-		}
-
-		if req.WantReply {
-			req.Reply(false, nil)
-		}
-	}
-
-	Dlog("SSHRegister shutdown")
-}
-
-func (c *SSHRegister) handleDeferredPut() {
-	for item := range c.putChan {
-		data := make([]byte, item.Size())
-		if _, err := item.Read(data); err != nil {
-			continue
-		}
-		PutRegister(c.ch, uint8(item.Index()), item.Attributes(), data)
-	}
-}
-
-func (c *SSHRegister) Close() error {
-	close(c.putChan)
-	return c.ch.Close()
 }
 
 // Get register data from the remote SSH server.
@@ -156,7 +102,9 @@ func (c *SSHRegister) Put(reg uint8, attrs uint8, data []byte) (err error) {
 		return err
 	}
 
-	c.putChan <- item
+	if c.putChan != nil {
+		c.putChan <- item
+	}
 
 	return nil
 }
