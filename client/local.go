@@ -94,6 +94,8 @@ func LocalListen(sshHost string, sshPort int) error {
 					if _, err := io.ReadAtLeast(item, data, item.Size()); err == nil {
 						if err := platform.ClipboardPut(data); err != nil {
 							sshclip.Elog("Error setting clipboard:", err)
+						} else if platform.NotificationsEnabled() {
+							platform.PostNotification("Clipboard updated from remote")
 						}
 					}
 				}
