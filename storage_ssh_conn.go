@@ -72,7 +72,7 @@ func (c *SSHRegister) deferredPutRoutine() {
 
 func (c *SSHRegister) Run() {
 	var retryCount int
-	var retryDelay time.Duration
+	retryDelay := time.Second
 	stopEvents := CreateListener(Interrupt, Terminate)
 
 mainloop:
@@ -93,8 +93,8 @@ mainloop:
 
 				// Start retrying every 1 second and gradually back off to retrying
 				// every 5 seconds.
+				retryCount++
 				if retryCount <= 50 && retryCount%10 == 0 {
-					retryCount++
 					retryDelay = time.Second * time.Duration((retryCount/10)+1)
 				}
 
@@ -104,7 +104,7 @@ mainloop:
 			} else {
 				Dlog("SSHRegister connected")
 				retryCount = 0
-				retryDelay = 0
+				retryDelay = time.Second
 				go c.deferredPutRoutine()
 
 				if err := SyncRegister(c.ch, c.storage); err != nil {
