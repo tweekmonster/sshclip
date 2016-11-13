@@ -44,7 +44,12 @@ func Spawn(host string, port int) error {
 		},
 	}
 
-	proc, err := os.StartProcess(exe, []string{exe, "monitor", "--host", host, "--port", strconv.Itoa(port)}, attr)
+	cmd := "monitor"
+	if same, err := platform.LocalIsServer(host); err == nil && same {
+		cmd = "server"
+	}
+
+	proc, err := os.StartProcess(exe, []string{exe, cmd, "--host", host, "--port", strconv.Itoa(port)}, attr)
 	if err != nil {
 		return err
 	}
@@ -52,10 +57,10 @@ func Spawn(host string, port int) error {
 	return proc.Release()
 }
 
-// LocalListen listens on a unix socket or named pipe to receive local queries.
+// MonitorListen listens on a unix socket or named pipe to receive local queries.
 // The purpose of this is to maintain a fast local cache to keep the clients
 // responsive.
-func LocalListen(sshHost string, sshPort int) error {
+func MonitorListen(sshHost string, sshPort int) error {
 	storage := sshclip.NewMemoryRegister()
 	sshClient, err := sshclip.NewSSHRegister(sshHost, sshPort, storage)
 	if err != nil {
@@ -109,7 +114,7 @@ func LocalListen(sshHost string, sshPort int) error {
 	})
 }
 
-// LocalConnect connects to the local monitoring server.
-func LocalConnect(timeout time.Duration) (pipe net.Conn, err error) {
+// MonitorConnect connects to the local monitoring server.
+func MonitorConnect(timeout time.Duration) (pipe net.Conn, err error) {
 	return pipeDial(timeout)
 }

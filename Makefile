@@ -19,6 +19,9 @@ kill-monitor:
 	@-test -f /tmp/sshclip_monitor.lock \
 		&& kill $$(cat /tmp/sshclip_monitor.lock) 2>/dev/null \
 		&& rm /tmp/sshclip_monitor.lock
+	@-test -f /tmp/sshclip_server.lock \
+		&& kill $$(cat /tmp/sshclip_server.lock) 2>/dev/null \
+		&& rm /tmp/sshclip_server.lock
 
 $(XGO_BUILD_TARGETS): kill-monitor $(SOURCES)
 	$(eval t := $(wordlist 2,3,$(subst /, ,$@)))

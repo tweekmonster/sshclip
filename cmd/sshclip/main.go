@@ -2,19 +2,25 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"time"
 
+	"golang.org/x/crypto/ssh"
+
 	termutil "github.com/andrew-d/go-termutil"
 	"github.com/nightlyone/lockfile"
 	"github.com/tweekmonster/sshclip"
 	"github.com/tweekmonster/sshclip/client"
+	"github.com/tweekmonster/sshclip/platform"
 	"github.com/tweekmonster/sshclip/server"
 	cli "gopkg.in/urfave/cli.v2"
 )
+
+var errLocalIsServer = errors.New("refusing to run monitor along side the server")
 
 func lockPath(name string) string {
 	return filepath.Join(os.TempDir(), "sshclip_"+name+".lock")
@@ -57,13 +63,17 @@ func runServer(c *cli.Context) error {
 }
 
 func runMonitor(c *cli.Context) error {
+	if same, _ := platform.LocalIsServer(c.String("host")); same {
+		return errLocalIsServer
+	}
+
 	sshclip.LogPrefix = "monitor"
 	lock, err := lockFile("monitor", time.Second*5)
 	if err != nil {
 		return err
 	}
 	defer lock.Unlock()
-	if err := client.LocalListen(c.String("host"), c.Int("port")); err != nil {
+	if err := client.MonitorListen(c.String("host"), c.Int("port")); err != nil {
 		return err
 	}
 
@@ -77,15 +87,40 @@ func runClient(c *cli.Context) (err error) {
 		return manageKeys(c.String("host"), c.Int("port"))
 	}
 
+	remoteType := "monitor"
 	restart := c.Bool("restart")
-	conn, err := client.LocalConnect(0)
+
+	if same, _ := platform.LocalIsServer(c.String("host")); same {
+		remoteType = "server"
+	}
+
+	connect := func(timeout time.Duration) (io.ReadWriter, error) {
+		if remoteType == "server" {
+			sshClient, err := sshclip.SSHClientConnect(c.String("host"), c.Int("port"))
+			if err != nil {
+				return nil, err
+			}
+
+			ch, reqs, err := sshClient.OpenChannel("sshclip", nil)
+			if err != nil {
+				return nil, err
+			}
+
+			go ssh.DiscardRequests(reqs)
+			return ch, nil
+		}
+
+		return client.MonitorConnect(timeout)
+	}
+
+	conn, err := connect(0)
 
 	if err == nil && restart {
-		restartErr := errors.New("Failed to restart monitor")
+		restartErr := fmt.Errorf("Failed to restart %s", remoteType)
 		if _, err := conn.Write(sshclip.OpHeader(sshclip.OpStop)); err == nil {
 			if op, err := sshclip.ReadOp(conn); err == nil && op == sshclip.OpSuccess {
 				// Acquire the monitor's lock to ensure it's no longer running.
-				lock, err := lockFile("monitor", time.Second)
+				lock, err := lockFile(remoteType, time.Second)
 				if err == nil {
 					restartErr = nil
 					lock.Unlock()
@@ -108,7 +143,7 @@ func runClient(c *cli.Context) (err error) {
 		attempts := 100
 		t := time.NewTicker(time.Millisecond * 10)
 		for _ = range t.C {
-			conn, err = client.LocalConnect(time.Second * 5)
+			conn, err = connect(time.Second * 5)
 			if err == nil {
 				break
 			}
