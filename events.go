@@ -98,8 +98,33 @@ func AddListener(ch Listener, events ...Event) {
 	}
 }
 
-// RemoveListener removes a listener from the specified events.
-func RemoveListener(ch Listener, events ...Event) {
+func RemoveListener(ch Listener) {
+	evl.Lock()
+	defer evl.Unlock()
+
+	if evl.listeners == nil {
+		return
+	}
+
+	for e, listeners := range evl.listeners {
+		loopListeners := listeners
+		listeners = listeners[0:0]
+		for _, listener := range loopListeners {
+			if listener != ch {
+				listeners = append(listeners, ch)
+			}
+		}
+
+		if len(listeners) == 0 {
+			delete(evl.listeners, e)
+		} else {
+			evl.listeners[e] = listeners
+		}
+	}
+}
+
+// RemoveListenerEvents removes a listener from the specified events.
+func RemoveListenerEvents(ch Listener, events ...Event) {
 	evl.Lock()
 	defer evl.Unlock()
 

@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"syscall"
 	"time"
 
 	"golang.org/x/crypto/ssh"
@@ -115,21 +116,22 @@ func runClient(c *cli.Context) (err error) {
 
 	conn, err := connect(0)
 
-	if err == nil && restart {
-		restartErr := fmt.Errorf("Failed to restart %s", remoteType)
-		if _, err := conn.Write(sshclip.OpHeader(sshclip.OpStop)); err == nil {
-			if op, err := sshclip.ReadOp(conn); err == nil && op == sshclip.OpSuccess {
-				// Acquire the monitor's lock to ensure it's no longer running.
-				lock, err := lockFile(remoteType, time.Second)
-				if err == nil {
-					restartErr = nil
-					lock.Unlock()
+	if err != nil || restart {
+		lock := lockfile.Lockfile(lockPath(remoteType))
+		if proc, _ := lock.GetOwner(); proc != nil {
+			if err := proc.Signal(syscall.SIGTERM); err == nil {
+				t := time.NewTicker(time.Millisecond * 10)
+				attempts := 100
+				for _ = range t.C {
+					if attempts <= 0 {
+						return fmt.Errorf("Failed to restart %s", remoteType)
+					}
+					if _, err := lock.GetOwner(); err != nil {
+						break
+					}
+					attempts--
 				}
 			}
-		}
-
-		if restartErr != nil {
-			return restartErr
 		}
 
 		err = io.EOF

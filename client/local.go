@@ -15,7 +15,6 @@ import (
 
 // Spawn starts a local monitoring process.
 func Spawn(host string, port int) error {
-	sshclip.Dlog("Spawning monitor")
 	exe, err := osext.Executable()
 	if err != nil {
 		return err
@@ -48,6 +47,8 @@ func Spawn(host string, port int) error {
 	if same, err := platform.LocalIsServer(host); err == nil && same {
 		cmd = "server"
 	}
+
+	sshclip.Dlog("Spawning", cmd)
 
 	proc, err := os.StartProcess(exe, []string{exe, cmd, "--host", host, "--port", strconv.Itoa(port)}, attr)
 	if err != nil {
@@ -86,21 +87,29 @@ func MonitorListen(sshHost string, sshPort int) error {
 	}()
 
 	go func() {
+		stop := sshclip.CreateListener(sshclip.Terminate)
+		defer sshclip.RemoveListener(stop)
 		msgBytes := make([]byte, 2)
 
-		for msg := range storage.Notify {
-			binary.BigEndian.PutUint16(msgBytes, msg)
-			op := msgBytes[0]
-			reg := msgBytes[1]
+	loop:
+		for {
+			select {
+			case <-stop:
+				break loop
+			case msg := <-storage.Notify:
+				binary.BigEndian.PutUint16(msgBytes, msg)
+				op := msgBytes[0]
+				reg := msgBytes[1]
 
-			if op == sshclip.OpPut && reg == '+' {
-				if item, err := storage.GetItem(reg); err == nil {
-					data := make([]byte, item.Size())
-					if _, err := io.ReadAtLeast(item, data, item.Size()); err == nil {
-						if err := platform.ClipboardPut(data); err != nil {
-							sshclip.Elog("Error setting clipboard:", err)
-						} else if platform.NotificationsEnabled() {
-							platform.PostNotification("Clipboard updated from remote")
+				if op == sshclip.OpPut && reg == '+' {
+					if item, err := storage.GetItem(reg); err == nil {
+						data := make([]byte, item.Size())
+						if _, err := io.ReadAtLeast(item, data, item.Size()); err == nil {
+							if err := platform.ClipboardPut(data); err != nil {
+								sshclip.Elog("Error setting clipboard:", err)
+							} else if platform.NotificationsEnabled() {
+								platform.PostNotification("Clipboard updated from remote")
+							}
 						}
 					}
 				}

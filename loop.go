@@ -1,6 +1,9 @@
 package sshclip
 
-import "net"
+import (
+	"errors"
+	"net"
+)
 
 var manualStop = CreateEvent("ManualLoopStop")
 
@@ -12,9 +15,7 @@ func ListenLoopStop() {
 // listener in a goroutine.
 func ListenLoop(listener net.Listener, handler func(net.Conn)) error {
 	loopStop := CreateListener(Interrupt, Terminate, manualStop)
-	defer func() {
-		RemoveListener(loopStop, Interrupt, Terminate, manualStop)
-	}()
+	defer RemoveListener(loopStop)
 
 	conn := make(chan net.Conn)
 	errs := make(chan error)
@@ -37,7 +38,10 @@ func ListenLoop(listener net.Listener, handler func(net.Conn)) error {
 		case e := <-loopStop:
 			Dlog("Got event:", e)
 			return listener.Close()
-		case c := <-conn:
+		case c, ok := <-conn:
+			if !ok {
+				return errors.New("Connection channel dead")
+			}
 			Dlog("Connection from:", c.RemoteAddr())
 			go handler(c)
 		}

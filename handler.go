@@ -252,6 +252,7 @@ func HandlePayload(storage Register, channel io.ReadWriteCloser) error {
 		case OpStop:
 			channel.Write(OpHeader(OpSuccess))
 			ListenLoopStop()
+			return nil
 		}
 
 		return fmt.Errorf("Unknown op: %02x", op)

@@ -32,6 +32,7 @@ func ClipboardMonitor(storage sshclip.Register, reg uint8) error {
 	}
 
 	events := sshclip.CreateListener(sshclip.Terminate, stop)
+	defer sshclip.RemoveListener(events)
 	watchChan := make(chan []byte)
 	go watchClipboard(watchChan)
 

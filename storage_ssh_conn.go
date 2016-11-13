@@ -74,6 +74,7 @@ func (c *SSHRegister) Run() {
 	var retryCount int
 	retryDelay := time.Second
 	stopEvents := CreateListener(Interrupt, Terminate)
+	defer RemoveListener(stopEvents)
 
 mainloop:
 	for {

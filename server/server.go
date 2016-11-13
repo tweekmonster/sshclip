@@ -70,6 +70,7 @@ func (s *server) authenticate(conn ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Pe
 }
 
 func (s *server) run() error {
+	defer sshclip.Dlog("DEAD")
 	hostKeySigner, err := sshclip.GetHostKey()
 	if err != nil {
 		return err
@@ -136,20 +137,29 @@ func (s *server) broadcast(channel, name string, data []byte) {
 // Services the MemoryRegister's notification channel and notifies of register
 // changes.
 func (s *server) notificationRoutine() {
+	stop := sshclip.CreateListener(sshclip.Terminate)
+	defer sshclip.RemoveListener(stop)
+	defer sshclip.Dlog("Notification routine stopped")
 	msgBytes := make([]byte, 2)
 
-	for msg := range s.storage.Notify {
-		binary.BigEndian.PutUint16(msgBytes, msg)
-		op := msgBytes[0]
-		reg := msgBytes[1]
+loop:
+	for {
+		select {
+		case <-stop:
+			break loop
+		case msg := <-s.storage.Notify:
+			binary.BigEndian.PutUint16(msgBytes, msg)
+			op := msgBytes[0]
+			reg := msgBytes[1]
 
-		switch op {
-		case sshclip.OpPut:
-			item, err := s.storage.GetItem(reg)
-			if err == nil {
-				var b bytes.Buffer
-				binary.Write(&b, binary.BigEndian, item.Hash())
-				s.broadcast("sshclip", "sync", b.Bytes())
+			switch op {
+			case sshclip.OpPut:
+				item, err := s.storage.GetItem(reg)
+				if err == nil {
+					var b bytes.Buffer
+					binary.Write(&b, binary.BigEndian, item.Hash())
+					s.broadcast("sshclip", "sync", b.Bytes())
+				}
 			}
 		}
 	}
