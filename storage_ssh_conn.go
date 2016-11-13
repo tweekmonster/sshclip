@@ -9,7 +9,17 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
+func (c *SSHRegister) serviceConnWaiter() {
+	for _ = range c.connWaiter {
+		// Nothing
+	}
+}
+
 func (c *SSHRegister) tryConnect() error {
+	defer c.connOnce.Do(func() {
+		go c.serviceConnWaiter()
+	})
+
 	conn, err := SSHClientConnect(c.host, c.port)
 	if err != nil {
 		return err
@@ -48,11 +58,11 @@ func (c *SSHRegister) handleRequest(req *ssh.Request) {
 
 func (c *SSHRegister) deferredPutRoutine() {
 	for item := range c.putChan {
-		data := make([]byte, item.Size())
-		if _, err := item.Read(data); err != nil {
-			continue
-		}
 		if c.ch != nil {
+			data := make([]byte, item.Size())
+			if _, err := item.Read(data); err != nil {
+				continue
+			}
 			PutRegister(c.ch, uint8(item.Index()), item.Attributes(), data)
 		}
 	}
@@ -96,6 +106,10 @@ mainloop:
 				retryCount = 0
 				retryDelay = 0
 				go c.deferredPutRoutine()
+
+				if err := SyncRegister(c.ch, c.storage); err != nil {
+					Elog("Syncing register error:", err)
+				}
 			}
 		}
 

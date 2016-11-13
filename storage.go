@@ -14,6 +14,7 @@ import (
 var ErrTooLarge = errors.New("storage data too large")
 var ErrNotExist = errors.New("item does not exist")
 var ErrInvalidIndex = errors.New("invalid index")
+var Registers = []byte("abcdefghijklmnopqrstuvwxyz0123456789*+")
 
 // RegisterItem is an entry in the Register.
 type RegisterItem interface {
@@ -24,6 +25,7 @@ type RegisterItem interface {
 	Time() time.Time
 	Hash() RegisterItemHash
 	EqualsHash(h RegisterItemHash) bool
+	Bytes() []byte
 }
 
 // Register is a storage for Register data.
@@ -36,6 +38,7 @@ type Register interface {
 type RegisterItemHash struct {
 	Register uint8
 	Hash     [32]byte
+	Time     int64
 }
 
 // MemoryRegisterItem is an in-memory Register entry.
@@ -72,6 +75,7 @@ func (m *MemoryRegisterItem) Hash() RegisterItemHash {
 	return RegisterItemHash{
 		Register: m.index,
 		Hash:     m.hash,
+		Time:     m.created.UnixNano(),
 	}
 }
 
@@ -92,6 +96,12 @@ func (m *MemoryRegisterItem) Size() int {
 // Index of the register item in the register.
 func (m *MemoryRegisterItem) Index() int {
 	return int(m.index)
+}
+
+func (m *MemoryRegisterItem) Bytes() []byte {
+	data := make([]byte, m.Size())
+	copy(data, m.data)
+	return data
 }
 
 // MemoryRegister is an in-memory register.

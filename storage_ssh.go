@@ -12,24 +12,29 @@ import (
 // registers locally.  It opens an additional event channel to monitor
 // registers set by other clients.
 type SSHRegister struct {
-	sync.RWMutex
-	ch       ssh.Channel
-	putChan  chan RegisterItem
-	storage  *MemoryRegister
-	requests <-chan *ssh.Request
-	host     string
-	port     int
+	ch         ssh.Channel
+	putChan    chan RegisterItem
+	storage    *MemoryRegister
+	requests   <-chan *ssh.Request
+	host       string
+	port       int
+	connWaiter chan bool
+	connOnce   sync.Once
 }
 
 // NewSSHRegister creates a new SSHRegister.
 func NewSSHRegister(host string, port int, storage *MemoryRegister) (*SSHRegister, error) {
-	cli := &SSHRegister{
-		storage: storage,
-		host:    host,
-		port:    port,
-	}
-
-	return cli, nil
+	// XXX: connWaiter and connOnce are used to signal that there was at least one
+	// attempt to connect.  With the many goroutines in use, it's possible to call
+	// Get() or Put() before a connection has been made.  This would cause the
+	// client that spawns the monitor to recieve nothing.
+	// A refactor should be considered in the future.
+	return &SSHRegister{
+		storage:    storage,
+		host:       host,
+		port:       port,
+		connWaiter: make(chan bool),
+	}, nil
 }
 
 func (c *SSHRegister) putItem(item RegisterItem, notify bool) error {
@@ -67,12 +72,14 @@ func (c *SSHRegister) syncRegister(reg uint8) {
 
 // Get register data from the remote SSH server.
 func (c *SSHRegister) Get(reg uint8) (RegisterItem, error) {
+	c.connWaiter <- true
+
 	if !IsValidIndex(reg) {
 		return nil, ErrInvalidIndex
 	}
 
-	if item, err := c.storage.GetItem(reg); err == nil {
-		return item, nil
+	if item, err := c.storage.GetItem(reg); err == nil || c.ch == nil {
+		return item, err
 	}
 
 	item, err := GetRegister(c.ch, reg)
@@ -89,6 +96,8 @@ func (c *SSHRegister) Get(reg uint8) (RegisterItem, error) {
 
 // Put register data into the remote SSH server.
 func (c *SSHRegister) Put(reg uint8, attrs uint8, data []byte) (err error) {
+	c.connWaiter <- true
+
 	if !IsValidIndex(reg) {
 		return ErrInvalidIndex
 	}
@@ -102,7 +111,7 @@ func (c *SSHRegister) Put(reg uint8, attrs uint8, data []byte) (err error) {
 		return err
 	}
 
-	if c.putChan != nil {
+	if c.ch != nil && c.putChan != nil {
 		c.putChan <- item
 	}
 
@@ -110,5 +119,6 @@ func (c *SSHRegister) Put(reg uint8, attrs uint8, data []byte) (err error) {
 }
 
 func (c *SSHRegister) List() ([]RegisterItemHash, error) {
+	c.connWaiter <- true
 	return c.storage.List()
 }

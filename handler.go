@@ -120,39 +120,45 @@ func ListRegisters(rw io.ReadWriter) ([]RegisterItemHash, error) {
 
 // SyncRegister makes an OpSync request and synchronizes the registers.
 func SyncRegister(rw io.ReadWriter, reg Register) error {
-	regs, err := ListRegisters(rw)
+	Dlog("Making sync request")
+	remoteReg, err := ListRegisters(rw)
 	if err != nil {
 		return err
 	}
 
-	for _, r := range regs {
-		var sync bool
-		item, err := reg.Get(r.Register)
-		switch err {
-		case ErrNotExist:
-			sync = true
-		case nil:
-			sync = !item.EqualsHash(r)
-		default:
-			return err
+	remoteRegMap := make(map[uint8]RegisterItemHash)
+
+	for _, r := range remoteReg {
+		remoteRegMap[r.Register] = r
+	}
+
+	for _, i := range Registers {
+		remote, hasRemote := remoteRegMap[i]
+		local, _ := reg.Get(i)
+
+		if !hasRemote && local == nil {
+			continue
 		}
 
-		if sync {
-			item, err := GetRegister(rw, r.Register)
-			if err != nil {
-				return err
-			}
+		Dlog("Reg: %c, Remote: %t, Local: %t", i, hasRemote, local != nil)
 
-			data := make([]byte, item.Size())
-			if _, err := item.Read(data); err != nil {
-				return err
+		switch {
+		case !hasRemote && local != nil:
+			PutRegister(rw, i, local.Attributes(), local.Bytes())
+		case hasRemote && local == nil:
+			if item, err := GetRegister(rw, i); err == nil {
+				reg.Put(i, item.Attributes(), item.Bytes())
 			}
-
-			if err := reg.Put(uint8(item.Index()), item.Attributes(), data); err != nil {
-				return err
+		case hasRemote && local != nil:
+			if !local.EqualsHash(remote) {
+				if local.Time().UnixNano() > remote.Time {
+					PutRegister(rw, i, local.Attributes(), local.Bytes())
+				} else {
+					if item, err := GetRegister(rw, i); err == nil {
+						reg.Put(i, item.Attributes(), item.Bytes())
+					}
+				}
 			}
-
-			Dlog("Synced register '%c'", item.Index())
 		}
 	}
 
