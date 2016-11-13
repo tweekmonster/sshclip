@@ -3,7 +3,6 @@ package sshclip
 import "net"
 
 var manualStop = CreateEvent("ManualLoopStop")
-var loopStop = CreateListener(Interrupt, Terminate, manualStop)
 
 func ListenLoopStop() {
 	DispatchEvent(manualStop)
@@ -12,6 +11,11 @@ func ListenLoopStop() {
 // ListenLoop waits for an stop event while accepting connections from a
 // listener in a goroutine.
 func ListenLoop(listener net.Listener, handler func(net.Conn)) error {
+	loopStop := CreateListener(Interrupt, Terminate, manualStop)
+	defer func() {
+		RemoveListener(loopStop, Interrupt, Terminate, manualStop)
+	}()
+
 	conn := make(chan net.Conn)
 	errs := make(chan error)
 
